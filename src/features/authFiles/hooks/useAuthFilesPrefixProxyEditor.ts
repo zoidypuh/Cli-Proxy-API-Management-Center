@@ -6,11 +6,15 @@ import { useNotificationStore } from '@/stores';
 import { formatFileSize } from '@/utils/format';
 import { MAX_AUTH_FILE_SIZE } from '@/utils/constants';
 import {
+  applyClaudeAuthFileCloak,
   applyCodexAuthFileWebsockets,
+  hasClaudeAuthFileCloakConfig,
+  normalizeClaudeCloakMode,
   normalizeExcludedModels,
   parseDisableCoolingValue,
   parseExcludedModelsText,
   parsePriorityValue,
+  readClaudeAuthFileSensitiveWords,
   readCodexAuthFileWebsockets,
 } from '@/features/authFiles/constants';
 
@@ -20,6 +24,11 @@ export type PrefixProxyEditorField =
   | 'priority'
   | 'excludedModelsText'
   | 'disableCooling'
+  | 'cloakEnabled'
+  | 'cloakMode'
+  | 'cloakStrictMode'
+  | 'cloakSensitiveWordsText'
+  | 'cloakCacheUserId'
   | 'websockets'
   | 'note';
 
@@ -28,6 +37,7 @@ export type PrefixProxyEditorFieldValue = string | boolean;
 export type PrefixProxyEditorState = {
   fileName: string;
   fileInfoText: string;
+  isClaudeFile: boolean;
   isCodexFile: boolean;
   loading: boolean;
   saving: boolean;
@@ -40,6 +50,11 @@ export type PrefixProxyEditorState = {
   priority: string;
   excludedModelsText: string;
   disableCooling: string;
+  cloakEnabled: boolean;
+  cloakMode: string;
+  cloakStrictMode: boolean;
+  cloakSensitiveWordsText: string;
+  cloakCacheUserId: boolean;
   websockets: boolean;
   note: string;
   noteTouched: boolean;
@@ -104,8 +119,20 @@ const buildPrefixProxyUpdatedText = (editor: PrefixProxyEditorState | null): str
     }
   }
 
+  const withClaudeCloak = editor.isClaudeFile
+    ? applyClaudeAuthFileCloak(next, {
+        enabled: editor.cloakEnabled,
+        mode: editor.cloakMode,
+        strictMode: editor.cloakStrictMode,
+        sensitiveWordsText: editor.cloakSensitiveWordsText,
+        cacheUserId: editor.cloakCacheUserId,
+      })
+    : next;
+
   return JSON.stringify(
-    editor.isCodexFile ? applyCodexAuthFileWebsockets(next, editor.websockets) : next
+    editor.isCodexFile
+      ? applyCodexAuthFileWebsockets(withClaudeCloak, editor.websockets)
+      : withClaudeCloak
   );
 };
 
@@ -136,6 +163,7 @@ export function useAuthFilesPrefixProxyEditor(
     const normalizedProvider = String(file.provider ?? '')
       .trim()
       .toLowerCase();
+    const isClaudeFile = normalizedType === 'claude' || normalizedProvider === 'claude';
     const isCodexFile = normalizedType === 'codex' || normalizedProvider === 'codex';
 
     if (disableControls) return;
@@ -147,6 +175,7 @@ export function useAuthFilesPrefixProxyEditor(
     setPrefixProxyEditor({
       fileName: name,
       fileInfoText: JSON.stringify(file, null, 2),
+      isClaudeFile,
       isCodexFile,
       loading: true,
       saving: false,
@@ -159,6 +188,11 @@ export function useAuthFilesPrefixProxyEditor(
       priority: '',
       excludedModelsText: '',
       disableCooling: '',
+      cloakEnabled: false,
+      cloakMode: 'auto',
+      cloakStrictMode: false,
+      cloakSensitiveWordsText: '',
+      cloakCacheUserId: false,
       websockets: false,
       note: '',
       noteTouched: false,
@@ -211,6 +245,11 @@ export function useAuthFilesPrefixProxyEditor(
       const priority = parsePriorityValue(json.priority);
       const excludedModels = normalizeExcludedModels(json.excluded_models);
       const disableCoolingValue = parseDisableCoolingValue(json.disable_cooling);
+      const cloakEnabled = hasClaudeAuthFileCloakConfig(json);
+      const cloakMode = normalizeClaudeCloakMode(json.cloak_mode);
+      const cloakStrictMode = parseDisableCoolingValue(json.cloak_strict_mode) ?? false;
+      const cloakSensitiveWords = readClaudeAuthFileSensitiveWords(json);
+      const cloakCacheUserId = parseDisableCoolingValue(json.cloak_cache_user_id) ?? false;
       const websocketsValue = readCodexAuthFileWebsockets(json);
       const note = typeof json.note === 'string' ? json.note : '';
 
@@ -228,6 +267,11 @@ export function useAuthFilesPrefixProxyEditor(
           excludedModelsText: excludedModels.join('\n'),
           disableCooling:
             disableCoolingValue === undefined ? '' : disableCoolingValue ? 'true' : 'false',
+          cloakEnabled,
+          cloakMode,
+          cloakStrictMode,
+          cloakSensitiveWordsText: cloakSensitiveWords.join('\n'),
+          cloakCacheUserId,
           websockets: websocketsValue,
           note,
           noteTouched: false,
@@ -255,6 +299,13 @@ export function useAuthFilesPrefixProxyEditor(
       if (field === 'priority') return { ...prev, priority: String(value) };
       if (field === 'excludedModelsText') return { ...prev, excludedModelsText: String(value) };
       if (field === 'disableCooling') return { ...prev, disableCooling: String(value) };
+      if (field === 'cloakEnabled') return { ...prev, cloakEnabled: Boolean(value) };
+      if (field === 'cloakMode') return { ...prev, cloakMode: String(value) };
+      if (field === 'cloakStrictMode') return { ...prev, cloakStrictMode: Boolean(value) };
+      if (field === 'cloakSensitiveWordsText') {
+        return { ...prev, cloakSensitiveWordsText: String(value) };
+      }
+      if (field === 'cloakCacheUserId') return { ...prev, cloakCacheUserId: Boolean(value) };
       if (field === 'note') return { ...prev, note: String(value), noteTouched: true };
       return { ...prev, websockets: Boolean(value) };
     });

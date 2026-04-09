@@ -349,6 +349,8 @@
     "claude_cloak_sensitive_words_placeholder": "Comma or newline separated, e.g. internal-project",
     "claude_cloak_sensitive_words_hint": "These words are obfuscated with zero-width characters.",
     "claude_cloak_sensitive_words_count": "Sensitive words",
+    "claude_cloak_cache_user_id_label": "Cache fake user ID:",
+    "claude_cloak_cache_user_id_hint": "Reuse the generated Claude Code user_id metadata for this auth file instead of generating a new one on each request.",
     "vertex_title": "Vertex API Configuration",
     "vertex_add_button": "Add Configuration",
     "vertex_empty_title": "No Vertex Configuration",

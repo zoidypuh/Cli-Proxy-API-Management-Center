@@ -349,6 +349,8 @@
     "claude_cloak_sensitive_words_placeholder": "用逗号或换行分隔，例如: internal-project",
     "claude_cloak_sensitive_words_hint": "这些词会被插入零宽字符进行混淆。",
     "claude_cloak_sensitive_words_count": "敏感词",
+    "claude_cloak_cache_user_id_label": "缓存伪造用户 ID:",
+    "claude_cloak_cache_user_id_hint": "为这个认证文件复用生成的 Claude Code user_id 元数据，而不是每次请求都重新生成。",
     "vertex_title": "Vertex API 配置",
     "vertex_add_button": "添加配置",
     "vertex_empty_title": "暂无Vertex配置",

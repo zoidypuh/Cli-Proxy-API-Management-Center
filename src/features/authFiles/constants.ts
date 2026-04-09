@@ -212,6 +212,76 @@ export const parseDisableCoolingValue = (value: unknown): boolean | undefined =>
   return undefined;
 };
 
+export const normalizeClaudeCloakMode = (value: unknown): string => {
+  if (typeof value !== 'string') return 'auto';
+
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'always' || normalized === 'full') return 'always';
+  if (normalized === 'never') return 'never';
+  return 'auto';
+};
+
+export const parseAuthFileTextList = (value: unknown): string[] => {
+  if (typeof value !== 'string') return [];
+
+  const seen = new Set<string>();
+  const result: string[] = [];
+  value.split(/[\n,]+/).forEach((entry) => {
+    const trimmed = entry.trim();
+    const key = trimmed.toLowerCase();
+    if (!trimmed || seen.has(key)) return;
+    seen.add(key);
+    result.push(trimmed);
+  });
+  return result;
+};
+
+export const readClaudeAuthFileSensitiveWords = (value: Record<string, unknown>): string[] =>
+  parseAuthFileTextList(value.cloak_sensitive_words);
+
+export const hasClaudeAuthFileCloakConfig = (value: Record<string, unknown>): boolean =>
+  (typeof value.cloak_mode === 'string' && value.cloak_mode.trim().length > 0) ||
+  parseDisableCoolingValue(value.cloak_strict_mode) !== undefined ||
+  readClaudeAuthFileSensitiveWords(value).length > 0 ||
+  parseDisableCoolingValue(value.cloak_cache_user_id) !== undefined;
+
+export const applyClaudeAuthFileCloak = (
+  value: Record<string, unknown>,
+  cloak: {
+    enabled: boolean;
+    mode: string;
+    strictMode: boolean;
+    sensitiveWordsText: string;
+    cacheUserId: boolean;
+  }
+): Record<string, unknown> => {
+  const next = { ...value };
+
+  delete next.cloak_mode;
+  delete next.cloak_strict_mode;
+  delete next.cloak_sensitive_words;
+  delete next.cloak_cache_user_id;
+
+  if (!cloak.enabled) return next;
+
+  next.cloak_mode = normalizeClaudeCloakMode(cloak.mode);
+
+  if (cloak.strictMode) {
+    next.cloak_strict_mode = 'true';
+  }
+
+  const sensitiveWords = parseAuthFileTextList(cloak.sensitiveWordsText);
+  if (sensitiveWords.length > 0) {
+    next.cloak_sensitive_words = sensitiveWords.join(',');
+  }
+
+  if (cloak.cacheUserId) {
+    next.cloak_cache_user_id = 'true';
+  }
+
+  return next;
+};
+
 export const readCodexAuthFileWebsockets = (value: Record<string, unknown>): boolean =>
   parseDisableCoolingValue(value.websockets) ?? false;
 

@@ -3,6 +3,7 @@ import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { Input } from '@/components/ui/Input';
+import { Select } from '@/components/ui/Select';
 import { ToggleSwitch } from '@/components/ui/ToggleSwitch';
 import type {
   PrefixProxyEditorField,
@@ -35,6 +36,11 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
     }
   };
   const previewText = formatJsonText(updatedText);
+  const cloakModeOptions = [
+    { value: 'auto', label: t('ai_providers.claude_cloak_mode_auto') },
+    { value: 'always', label: t('ai_providers.claude_cloak_mode_always') },
+    { value: 'never', label: t('ai_providers.claude_cloak_mode_never') },
+  ];
 
   return (
     <Modal
@@ -154,6 +160,72 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
                   disabled={disableControls || editor.saving || !editor.json}
                   onChange={(e) => onChange('note', e.target.value)}
                 />
+                {editor.isClaudeFile && (
+                  <>
+                    <div className="form-group">
+                      <label>{t('ai_providers.claude_cloak_title')}</label>
+                      <ToggleSwitch
+                        checked={Boolean(editor.cloakEnabled)}
+                        disabled={disableControls || editor.saving || !editor.json}
+                        ariaLabel={t('ai_providers.claude_cloak_toggle_aria')}
+                        label={t('ai_providers.claude_cloak_toggle_label')}
+                        onChange={(value) => onChange('cloakEnabled', value)}
+                      />
+                      <div className="hint">{t('ai_providers.claude_cloak_hint')}</div>
+                    </div>
+                    {editor.cloakEnabled ? (
+                      <>
+                        <div className="form-group">
+                          <label>{t('ai_providers.claude_cloak_mode_label')}</label>
+                          <Select
+                            value={editor.cloakMode}
+                            options={cloakModeOptions}
+                            onChange={(value) => onChange('cloakMode', value)}
+                            ariaLabel={t('ai_providers.claude_cloak_mode_label')}
+                            disabled={disableControls || editor.saving || !editor.json}
+                          />
+                          <div className="hint">{t('ai_providers.claude_cloak_mode_hint')}</div>
+                        </div>
+                        <div className="form-group">
+                          <label>{t('ai_providers.claude_cloak_strict_label')}</label>
+                          <ToggleSwitch
+                            checked={Boolean(editor.cloakStrictMode)}
+                            disabled={disableControls || editor.saving || !editor.json}
+                            ariaLabel={t('ai_providers.claude_cloak_strict_label')}
+                            onChange={(value) => onChange('cloakStrictMode', value)}
+                          />
+                          <div className="hint">{t('ai_providers.claude_cloak_strict_hint')}</div>
+                        </div>
+                        <div className="form-group">
+                          <label>{t('ai_providers.claude_cloak_sensitive_words_label')}</label>
+                          <textarea
+                            className="input"
+                            value={editor.cloakSensitiveWordsText}
+                            placeholder={t('ai_providers.claude_cloak_sensitive_words_placeholder')}
+                            rows={3}
+                            disabled={disableControls || editor.saving || !editor.json}
+                            onChange={(e) => onChange('cloakSensitiveWordsText', e.target.value)}
+                          />
+                          <div className="hint">
+                            {t('ai_providers.claude_cloak_sensitive_words_hint')}
+                          </div>
+                        </div>
+                        <div className="form-group">
+                          <label>{t('ai_providers.claude_cloak_cache_user_id_label')}</label>
+                          <ToggleSwitch
+                            checked={Boolean(editor.cloakCacheUserId)}
+                            disabled={disableControls || editor.saving || !editor.json}
+                            ariaLabel={t('ai_providers.claude_cloak_cache_user_id_label')}
+                            onChange={(value) => onChange('cloakCacheUserId', value)}
+                          />
+                          <div className="hint">
+                            {t('ai_providers.claude_cloak_cache_user_id_hint')}
+                          </div>
+                        </div>
+                      </>
+                    ) : null}
+                  </>
+                )}
                 {editor.isCodexFile && (
                   <div className="form-group">
                     <label>{t('ai_providers.codex_websockets_label')}</label>

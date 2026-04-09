@@ -349,6 +349,8 @@
     "claude_cloak_sensitive_words_placeholder": "Через запятую или с новой строки, например internal-project",
     "claude_cloak_sensitive_words_hint": "Эти слова будут обфусцированы с помощью символов нулевой ширины.",
     "claude_cloak_sensitive_words_count": "Чувствительные слова",
+    "claude_cloak_cache_user_id_label": "Кэшировать поддельный user ID:",
+    "claude_cloak_cache_user_id_hint": "Переиспользовать сгенерированные метаданные Claude Code user_id для этого auth-файла вместо генерации нового значения на каждый запрос.",
     "vertex_title": "Конфигурация Vertex API",
     "vertex_add_button": "Добавить конфигурацию",
     "vertex_empty_title": "Конфигурации Vertex отсутствуют",
