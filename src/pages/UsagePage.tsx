@@ -312,6 +312,16 @@ export function UsagePage() {
 
       {error && <div className={styles.errorBox}>{error}</div>}
 
+      <RequestEventsDetailsCard
+        usage={filteredUsage}
+        loading={loading}
+        geminiKeys={config?.geminiApiKeys || []}
+        claudeConfigs={config?.claudeApiKeys || []}
+        codexConfigs={config?.codexApiKeys || []}
+        vertexConfigs={config?.vertexApiKeys || []}
+        openaiProviders={config?.openaiCompatibility || []}
+      />
+
       {/* Stats Overview Cards */}
       <StatCards
         usage={graphUsage}
@@ -381,21 +391,18 @@ export function UsagePage() {
         hourWindowHours={hourWindowHours}
       />
 
-      <RequestEventsDetailsCard
-        usage={filteredUsage}
-        loading={loading}
-        geminiKeys={config?.geminiApiKeys || []}
-        claudeConfigs={config?.claudeApiKeys || []}
-        codexConfigs={config?.codexApiKeys || []}
-        vertexConfigs={config?.vertexApiKeys || []}
-        openaiProviders={config?.openaiCompatibility || []}
-      />
-
       {/* Details Grid */}
       <div className={styles.detailsGrid}>
         <ApiDetailsCard apiStats={apiStats} loading={loading} hasPrices={hasPrices} />
         <ModelStatsCard modelStats={modelStats} loading={loading} hasPrices={hasPrices} />
       </div>
+
+      {/* Price Settings */}
+      <PriceSettingsCard
+        modelNames={modelNames}
+        modelPrices={modelPrices}
+        onPricesChange={setModelPrices}
+      />
 
       {/* Credential Stats */}
       <CredentialStatsCard
@@ -406,13 +413,6 @@ export function UsagePage() {
         codexConfigs={config?.codexApiKeys || []}
         vertexConfigs={config?.vertexApiKeys || []}
         openaiProviders={config?.openaiCompatibility || []}
-      />
-
-      {/* Price Settings */}
-      <PriceSettingsCard
-        modelNames={modelNames}
-        modelPrices={modelPrices}
-        onPricesChange={setModelPrices}
       />
     </div>
   );
