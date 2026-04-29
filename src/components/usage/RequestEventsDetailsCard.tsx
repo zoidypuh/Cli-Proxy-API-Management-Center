@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -17,7 +17,7 @@ import {
 import { downloadBlob } from '@/utils/download';
 import styles from '@/pages/UsagePage.module.scss';
 
-const ALL_FILTER = '__all__';
+export const REQUEST_EVENTS_ALL_FILTER = '__all__';
 const MAX_RENDERED_EVENTS = 500;
 
 type RequestEventRow = {
@@ -41,6 +41,8 @@ type RequestEventRow = {
 export interface RequestEventsDetailsCardProps {
   usage: unknown;
   loading: boolean;
+  modelFilter?: string;
+  onModelFilterChange?: (value: string) => void;
   geminiKeys: GeminiKeyConfig[];
   claudeConfigs: ProviderKeyConfig[];
   codexConfigs: ProviderKeyConfig[];
@@ -64,6 +66,8 @@ const encodeCsv = (value: string | number): string => {
 export function RequestEventsDetailsCard({
   usage,
   loading,
+  modelFilter: controlledModelFilter,
+  onModelFilterChange,
   geminiKeys,
   claudeConfigs,
   codexConfigs,
@@ -72,10 +76,22 @@ export function RequestEventsDetailsCard({
 }: RequestEventsDetailsCardProps) {
   const { t, i18n } = useTranslation();
 
-  const [modelFilter, setModelFilter] = useState(ALL_FILTER);
-  const [sourceFilter, setSourceFilter] = useState(ALL_FILTER);
-  const [authIndexFilter, setAuthIndexFilter] = useState(ALL_FILTER);
+  const [internalModelFilter, setInternalModelFilter] = useState(REQUEST_EVENTS_ALL_FILTER);
+  const [sourceFilter, setSourceFilter] = useState(REQUEST_EVENTS_ALL_FILTER);
+  const [authIndexFilter, setAuthIndexFilter] = useState(REQUEST_EVENTS_ALL_FILTER);
   const [authFileMap, setAuthFileMap] = useState<Map<string, CredentialInfo>>(new Map());
+  const modelFilter = controlledModelFilter ?? internalModelFilter;
+
+  const setModelFilter = useCallback(
+    (value: string) => {
+      if (onModelFilterChange) {
+        onModelFilterChange(value);
+        return;
+      }
+      setInternalModelFilter(value);
+    },
+    [onModelFilterChange]
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -170,7 +186,7 @@ export function RequestEventsDetailsCard({
 
   const modelOptions = useMemo(
     () => [
-      { value: ALL_FILTER, label: t('usage_stats.filter_all') },
+      { value: REQUEST_EVENTS_ALL_FILTER, label: t('usage_stats.filter_all') },
       ...Array.from(new Set(rows.map((row) => row.model))).map((model) => ({
         value: model,
         label: model
@@ -181,7 +197,7 @@ export function RequestEventsDetailsCard({
 
   const sourceOptions = useMemo(
     () => [
-      { value: ALL_FILTER, label: t('usage_stats.filter_all') },
+      { value: REQUEST_EVENTS_ALL_FILTER, label: t('usage_stats.filter_all') },
       ...Array.from(new Set(rows.map((row) => row.source))).map((source) => ({
         value: source,
         label: source
@@ -192,7 +208,7 @@ export function RequestEventsDetailsCard({
 
   const authIndexOptions = useMemo(
     () => [
-      { value: ALL_FILTER, label: t('usage_stats.filter_all') },
+      { value: REQUEST_EVENTS_ALL_FILTER, label: t('usage_stats.filter_all') },
       ...Array.from(new Set(rows.map((row) => row.authIndex))).map((authIndex) => ({
         value: authIndex,
         label: authIndex
@@ -214,19 +230,26 @@ export function RequestEventsDetailsCard({
     [authIndexOptions]
   );
 
-  const effectiveModelFilter = modelOptionSet.has(modelFilter) ? modelFilter : ALL_FILTER;
-  const effectiveSourceFilter = sourceOptionSet.has(sourceFilter) ? sourceFilter : ALL_FILTER;
+  const effectiveModelFilter = modelOptionSet.has(modelFilter)
+    ? modelFilter
+    : REQUEST_EVENTS_ALL_FILTER;
+  const effectiveSourceFilter = sourceOptionSet.has(sourceFilter)
+    ? sourceFilter
+    : REQUEST_EVENTS_ALL_FILTER;
   const effectiveAuthIndexFilter = authIndexOptionSet.has(authIndexFilter)
     ? authIndexFilter
-    : ALL_FILTER;
+    : REQUEST_EVENTS_ALL_FILTER;
 
   const filteredRows = useMemo(
     () =>
       rows.filter((row) => {
-        const modelMatched = effectiveModelFilter === ALL_FILTER || row.model === effectiveModelFilter;
-        const sourceMatched = effectiveSourceFilter === ALL_FILTER || row.source === effectiveSourceFilter;
+        const modelMatched =
+          effectiveModelFilter === REQUEST_EVENTS_ALL_FILTER || row.model === effectiveModelFilter;
+        const sourceMatched =
+          effectiveSourceFilter === REQUEST_EVENTS_ALL_FILTER || row.source === effectiveSourceFilter;
         const authIndexMatched =
-          effectiveAuthIndexFilter === ALL_FILTER || row.authIndex === effectiveAuthIndexFilter;
+          effectiveAuthIndexFilter === REQUEST_EVENTS_ALL_FILTER ||
+          row.authIndex === effectiveAuthIndexFilter;
         return modelMatched && sourceMatched && authIndexMatched;
       }),
     [effectiveAuthIndexFilter, effectiveModelFilter, effectiveSourceFilter, rows]
@@ -238,14 +261,14 @@ export function RequestEventsDetailsCard({
   );
 
   const hasActiveFilters =
-    effectiveModelFilter !== ALL_FILTER ||
-    effectiveSourceFilter !== ALL_FILTER ||
-    effectiveAuthIndexFilter !== ALL_FILTER;
+    effectiveModelFilter !== REQUEST_EVENTS_ALL_FILTER ||
+    effectiveSourceFilter !== REQUEST_EVENTS_ALL_FILTER ||
+    effectiveAuthIndexFilter !== REQUEST_EVENTS_ALL_FILTER;
 
   const handleClearFilters = () => {
-    setModelFilter(ALL_FILTER);
-    setSourceFilter(ALL_FILTER);
-    setAuthIndexFilter(ALL_FILTER);
+    setModelFilter(REQUEST_EVENTS_ALL_FILTER);
+    setSourceFilter(REQUEST_EVENTS_ALL_FILTER);
+    setAuthIndexFilter(REQUEST_EVENTS_ALL_FILTER);
   };
 
   const handleExportCsv = () => {

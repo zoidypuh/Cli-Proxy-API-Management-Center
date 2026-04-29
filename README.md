@@ -21,7 +21,7 @@ Since version 6.0.19, the Web UI ships with the main program; access it via `/ma
 
 1. Start your CLI Proxy API service.
 2. Open: `http://<host>:<api_port>/management.html`
-3. Enter your **management key** and connect.
+3. Enter your **management key** if one is configured, then connect.
 
 The address is auto-detected from the current page URL; manual override is supported.
 
@@ -60,7 +60,7 @@ You can enter any of the following; the UI will normalize it:
 
 ### Management key (not the same as API keys)
 
-The management key is sent with every request as:
+If configured, the management key is sent with every request as:
 
 - `Authorization: Bearer <MANAGEMENT_KEY>` (default)
 
@@ -124,12 +124,12 @@ The UI language is automatically detected from browser settings and can be manua
 
 ## Security notes
 
-- The management key is stored in browser `localStorage` using a lightweight obfuscation format (`enc::v1::...`) to avoid plaintext storage; treat it as sensitive.
+- When remembered, the management key is stored in browser `localStorage` using a lightweight obfuscation format (`enc::v1::...`) to avoid plaintext storage; treat it as sensitive.
 - Use a dedicated browser profile/device for management. Be cautious when enabling remote management and evaluate its exposure surface.
 
 ## Troubleshooting
 
-- **Can’t connect / 401**: confirm the API address and management key; remote access may require enabling remote management in the server config.
+- **Can’t connect / 401**: confirm the API address and, if configured, the management key; remote access may require enabling remote management in the server config.
 - **Repeated auth failures**: the server may temporarily block remote IPs.
 - **Logs page missing**: enable “Logging to file” in Basic Settings; the navigation item is shown only when file logging is enabled.
 - **Some features show “unsupported”**: the backend may be too old or the endpoint is disabled/absent (common for model lists per auth file, excluded models, logs).

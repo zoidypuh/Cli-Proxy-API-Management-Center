@@ -67,7 +67,7 @@ export const useAuthStore = create<AuthStoreState>()(
           });
           apiClient.setConfig({ apiBase: resolvedBase, managementKey: resolvedKey });
 
-          if (wasLoggedIn && resolvedBase && resolvedKey) {
+          if (wasLoggedIn && resolvedBase) {
             try {
               await get().login({
                 apiBase: resolvedBase,
@@ -157,7 +157,7 @@ export const useAuthStore = create<AuthStoreState>()(
       checkAuth: async () => {
         const { managementKey, apiBase } = get();
 
-        if (!managementKey || !apiBase) {
+        if (!apiBase) {
           return false;
         }
 

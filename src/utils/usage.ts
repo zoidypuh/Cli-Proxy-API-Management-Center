@@ -213,6 +213,121 @@ export function filterUsageByTimeRange<T>(usageData: T, range: UsageTimeRange, n
   } as T;
 }
 
+const getNumberField = (record: Record<string, unknown>, key: string): number | null => {
+  const value = record[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+};
+
+const summarizeUsageModelEntry = (modelEntry: Record<string, unknown>): UsageSummary => {
+  const details = Array.isArray(modelEntry.details) ? modelEntry.details : [];
+  const derived = createUsageSummary();
+
+  details.forEach((detail) => {
+    const detailRecord = isRecord(detail) ? detail : null;
+    if (!detailRecord) {
+      return;
+    }
+    derived.totalRequests += 1;
+    if (detailRecord.failed === true) {
+      derived.failureCount += 1;
+    } else {
+      derived.successCount += 1;
+    }
+    derived.totalTokens += extractTotalTokens(detailRecord);
+  });
+
+  return {
+    totalRequests: getNumberField(modelEntry, 'total_requests') ?? derived.totalRequests,
+    successCount: getNumberField(modelEntry, 'success_count') ?? derived.successCount,
+    failureCount: getNumberField(modelEntry, 'failure_count') ?? derived.failureCount,
+    totalTokens: getNumberField(modelEntry, 'total_tokens') ?? derived.totalTokens
+  };
+};
+
+const normalizeUsageModelFilters = (modelFilters: string[]): string[] => {
+  const targets: string[] = [];
+
+  modelFilters.forEach((modelFilter) => {
+    const targetModel = modelFilter.trim();
+    if (!targetModel || targetModel === 'all' || targets.includes(targetModel)) {
+      return;
+    }
+    targets.push(targetModel);
+  });
+
+  return targets;
+};
+
+export function filterUsageByModels<T>(usageData: T, modelFilters: string[]): T {
+  const targetModels = normalizeUsageModelFilters(modelFilters);
+  if (!targetModels.length) {
+    return usageData;
+  }
+
+  const usageRecord = isRecord(usageData) ? usageData : null;
+  const apis = getApisRecord(usageData);
+  if (!usageRecord || !apis) {
+    return usageData;
+  }
+
+  const filteredApis: Record<string, unknown> = {};
+  const totalSummary = createUsageSummary();
+  const targetSet = new Set(targetModels);
+
+  Object.entries(apis).forEach(([apiName, apiEntry]) => {
+    if (!isRecord(apiEntry)) {
+      return;
+    }
+
+    const models = isRecord(apiEntry.models) ? apiEntry.models : null;
+    if (!models) {
+      return;
+    }
+
+    const filteredModels: Record<string, unknown> = {};
+    const apiSummary = createUsageSummary();
+
+    Object.entries(models).forEach(([modelName, modelEntry]) => {
+      if (!targetSet.has(modelName) || !isRecord(modelEntry)) {
+        return;
+      }
+
+      const modelSummary = summarizeUsageModelEntry(modelEntry);
+      filteredModels[modelName] = modelEntry;
+
+      apiSummary.totalRequests += modelSummary.totalRequests;
+      apiSummary.successCount += modelSummary.successCount;
+      apiSummary.failureCount += modelSummary.failureCount;
+      apiSummary.totalTokens += modelSummary.totalTokens;
+    });
+
+    if (!Object.keys(filteredModels).length) {
+      return;
+    }
+
+    filteredApis[apiName] = {
+      ...apiEntry,
+      ...toUsageSummaryFields(apiSummary),
+      models: filteredModels
+    };
+
+    totalSummary.totalRequests += apiSummary.totalRequests;
+    totalSummary.successCount += apiSummary.successCount;
+    totalSummary.failureCount += apiSummary.failureCount;
+    totalSummary.totalTokens += apiSummary.totalTokens;
+  });
+
+  return {
+    ...usageRecord,
+    ...toUsageSummaryFields(totalSummary),
+    apis: filteredApis
+  } as T;
+}
+
+export function filterUsageByModel<T>(usageData: T, modelFilter: string): T {
+  return filterUsageByModels(usageData, [modelFilter]);
+}
+
 export const normalizeAuthIndex = (value: unknown) => {
   if (typeof value === 'number' && Number.isFinite(value)) {
     return value.toString();

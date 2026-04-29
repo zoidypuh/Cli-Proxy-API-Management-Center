@@ -3,7 +3,6 @@ import { Modal } from '@/components/ui/Modal';
 import { Button } from '@/components/ui/Button';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { Input } from '@/components/ui/Input';
-import { Select } from '@/components/ui/Select';
 import { ToggleSwitch } from '@/components/ui/ToggleSwitch';
 import type {
   PrefixProxyEditorField,
@@ -36,11 +35,7 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
     }
   };
   const previewText = formatJsonText(updatedText);
-  const cloakModeOptions = [
-    { value: 'auto', label: t('ai_providers.claude_cloak_mode_auto') },
-    { value: 'always', label: t('ai_providers.claude_cloak_mode_always') },
-    { value: 'never', label: t('ai_providers.claude_cloak_mode_never') },
-  ];
+  const cloakEverythingEnabled = editor?.cloakMode === 'always';
 
   return (
     <Modal
@@ -176,15 +171,16 @@ export function AuthFilesPrefixProxyEditorModal(props: AuthFilesPrefixProxyEdito
                     {editor.cloakEnabled ? (
                       <>
                         <div className="form-group">
-                          <label>{t('ai_providers.claude_cloak_mode_label')}</label>
-                          <Select
-                            value={editor.cloakMode}
-                            options={cloakModeOptions}
-                            onChange={(value) => onChange('cloakMode', value)}
-                            ariaLabel={t('ai_providers.claude_cloak_mode_label')}
+                          <label>{t('ai_providers.claude_cloak_everything_label')}</label>
+                          <ToggleSwitch
+                            checked={cloakEverythingEnabled}
                             disabled={disableControls || editor.saving || !editor.json}
+                            ariaLabel={t('ai_providers.claude_cloak_everything_label')}
+                            onChange={(value) => onChange('cloakMode', value ? 'always' : 'auto')}
                           />
-                          <div className="hint">{t('ai_providers.claude_cloak_mode_hint')}</div>
+                          <div className="hint">
+                            {t('ai_providers.claude_cloak_everything_hint')}
+                          </div>
                         </div>
                         <div className="form-group">
                           <label>{t('ai_providers.claude_cloak_strict_label')}</label>

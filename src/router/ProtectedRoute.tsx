@@ -6,14 +6,13 @@ import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 export function ProtectedRoute({ children }: { children: ReactElement }) {
   const location = useLocation();
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
-  const managementKey = useAuthStore((state) => state.managementKey);
   const apiBase = useAuthStore((state) => state.apiBase);
   const checkAuth = useAuthStore((state) => state.checkAuth);
   const [checking, setChecking] = useState(false);
 
   useEffect(() => {
     const tryRestore = async () => {
-      if (!isAuthenticated && managementKey && apiBase) {
+      if (!isAuthenticated && apiBase) {
         setChecking(true);
         try {
           await checkAuth();
@@ -23,7 +22,7 @@ export function ProtectedRoute({ children }: { children: ReactElement }) {
       }
     };
     tryRestore();
-  }, [apiBase, isAuthenticated, managementKey, checkAuth]);
+  }, [apiBase, isAuthenticated, checkAuth]);
 
   if (checking) {
     return (

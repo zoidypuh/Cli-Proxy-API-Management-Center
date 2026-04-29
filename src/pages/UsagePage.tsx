@@ -38,6 +38,7 @@ import {
   getApiStats,
   getModelStats,
   filterUsageByTimeRange,
+  filterUsageByModels,
   type UsageTimeRange
 } from '@/utils/usage';
 import styles from './UsagePage.module.scss';
@@ -70,7 +71,6 @@ const HOUR_WINDOW_BY_TIME_RANGE: Record<Exclude<UsageTimeRange, 'all'>, number> 
   '24h': 24,
   '7d': 7 * 24
 };
-
 const isUsageTimeRange = (value: unknown): value is UsageTimeRange =>
   value === '7h' || value === '24h' || value === '7d' || value === 'all';
 
@@ -83,9 +83,13 @@ const normalizeChartLines = (value: unknown, maxLines = MAX_CHART_LINES): string
     .filter((item): item is string => typeof item === 'string')
     .map((item) => item.trim())
     .filter(Boolean)
+    .filter((item, index, items) => items.indexOf(item) === index);
+
+  const modelLines = filtered
+    .filter((item) => item !== 'all')
     .slice(0, maxLines);
 
-  return filtered.length ? filtered : DEFAULT_CHART_LINES;
+  return modelLines.length ? modelLines : DEFAULT_CHART_LINES;
 };
 
 const loadChartLines = (): string[] => {
@@ -158,6 +162,18 @@ export function UsagePage() {
     () => (usage ? filterUsageByTimeRange(usage, timeRange) : null),
     [usage, timeRange]
   );
+  const selectedChartModels = useMemo(
+    () => chartLines.filter((line) => line !== 'all'),
+    [chartLines]
+  );
+  const graphUsage = useMemo(
+    () => (filteredUsage ? filterUsageByModels(filteredUsage, selectedChartModels) : filteredUsage),
+    [filteredUsage, selectedChartModels]
+  );
+  const chartLinesForGraphs = useMemo(
+    () => (selectedChartModels.length ? selectedChartModels : DEFAULT_CHART_LINES),
+    [selectedChartModels]
+  );
   const hourWindowHours =
     timeRange === 'all' ? undefined : HOUR_WINDOW_BY_TIME_RANGE[timeRange];
 
@@ -196,7 +212,7 @@ export function UsagePage() {
     rpmSparkline,
     tpmSparkline,
     costSparkline
-  } = useSparklines({ usage: filteredUsage, loading, nowMs });
+  } = useSparklines({ usage: graphUsage, loading, nowMs });
 
   // Chart data hook
   const {
@@ -208,17 +224,23 @@ export function UsagePage() {
     tokensChartData,
     requestsChartOptions,
     tokensChartOptions
-  } = useChartData({ usage: filteredUsage, chartLines, isDark, isMobile, hourWindowHours });
+  } = useChartData({
+    usage: graphUsage,
+    chartLines: chartLinesForGraphs,
+    isDark,
+    isMobile,
+    hourWindowHours
+  });
 
   // Derived data
   const modelNames = useMemo(() => getModelNamesFromUsage(usage), [usage]);
   const apiStats = useMemo(
-    () => getApiStats(filteredUsage, modelPrices),
-    [filteredUsage, modelPrices]
+    () => getApiStats(graphUsage, modelPrices),
+    [graphUsage, modelPrices]
   );
   const modelStats = useMemo(
-    () => getModelStats(filteredUsage, modelPrices),
-    [filteredUsage, modelPrices]
+    () => getModelStats(graphUsage, modelPrices),
+    [graphUsage, modelPrices]
   );
   const hasPrices = Object.keys(modelPrices).length > 0;
 
@@ -292,7 +314,7 @@ export function UsagePage() {
 
       {/* Stats Overview Cards */}
       <StatCards
-        usage={filteredUsage}
+        usage={graphUsage}
         loading={loading}
         modelPrices={modelPrices}
         nowMs={nowMs}
@@ -314,7 +336,7 @@ export function UsagePage() {
       />
 
       {/* Service Health */}
-      <ServiceHealthCard usage={usage} loading={loading} />
+      <ServiceHealthCard usage={graphUsage} loading={loading} />
 
       {/* Charts Grid */}
       <div className={styles.chartsGrid}>
@@ -342,7 +364,7 @@ export function UsagePage() {
 
       {/* Token Breakdown Chart */}
       <TokenBreakdownChart
-        usage={filteredUsage}
+        usage={graphUsage}
         loading={loading}
         isDark={isDark}
         isMobile={isMobile}
@@ -351,19 +373,13 @@ export function UsagePage() {
 
       {/* Cost Trend Chart */}
       <CostTrendChart
-        usage={filteredUsage}
+        usage={graphUsage}
         loading={loading}
         isDark={isDark}
         isMobile={isMobile}
         modelPrices={modelPrices}
         hourWindowHours={hourWindowHours}
       />
-
-      {/* Details Grid */}
-      <div className={styles.detailsGrid}>
-        <ApiDetailsCard apiStats={apiStats} loading={loading} hasPrices={hasPrices} />
-        <ModelStatsCard modelStats={modelStats} loading={loading} hasPrices={hasPrices} />
-      </div>
 
       <RequestEventsDetailsCard
         usage={filteredUsage}
@@ -375,9 +391,15 @@ export function UsagePage() {
         openaiProviders={config?.openaiCompatibility || []}
       />
 
+      {/* Details Grid */}
+      <div className={styles.detailsGrid}>
+        <ApiDetailsCard apiStats={apiStats} loading={loading} hasPrices={hasPrices} />
+        <ModelStatsCard modelStats={modelStats} loading={loading} hasPrices={hasPrices} />
+      </div>
+
       {/* Credential Stats */}
       <CredentialStatsCard
-        usage={filteredUsage}
+        usage={graphUsage}
         loading={loading}
         geminiKeys={config?.geminiApiKeys || []}
         claudeConfigs={config?.claudeApiKeys || []}

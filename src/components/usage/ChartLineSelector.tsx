@@ -19,14 +19,20 @@ export function ChartLineSelector({
   onChange
 }: ChartLineSelectorProps) {
   const { t } = useTranslation();
+  const selectedModelLines = useMemo(
+    () => chartLines.filter((line) => line !== 'all'),
+    [chartLines]
+  );
+  const unusedModel = useMemo(
+    () => modelNames.find((modelName) => !selectedModelLines.includes(modelName)),
+    [modelNames, selectedModelLines]
+  );
+  const canAdd = chartLines.length < maxLines && Boolean(unusedModel);
 
   const handleAdd = () => {
-    if (chartLines.length >= maxLines) return;
-    const unusedModel = modelNames.find((m) => !chartLines.includes(m));
+    if (!canAdd) return;
     if (unusedModel) {
-      onChange([...chartLines, unusedModel]);
-    } else {
-      onChange([...chartLines, 'all']);
+      onChange([...selectedModelLines, unusedModel]);
     }
   };
 
@@ -38,9 +44,17 @@ export function ChartLineSelector({
   };
 
   const handleChange = (index: number, value: string) => {
-    const newLines = [...chartLines];
-    newLines[index] = value;
-    onChange(newLines);
+    if (value === 'all') {
+      onChange(['all']);
+      return;
+    }
+
+    const newLines = chartLines
+      .map((line, lineIndex) => (lineIndex === index ? value : line))
+      .filter((line) => line !== 'all')
+      .filter((line, lineIndex, lines) => lines.indexOf(line) === lineIndex);
+
+    onChange(newLines.length ? newLines : ['all']);
   };
 
   const options = useMemo(
@@ -63,7 +77,7 @@ export function ChartLineSelector({
             variant="secondary"
             size="sm"
             onClick={handleAdd}
-            disabled={chartLines.length >= maxLines}
+            disabled={!canAdd}
           >
             {t('usage_stats.chart_line_add')}
           </Button>
