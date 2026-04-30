@@ -66,17 +66,25 @@ export const useAuthStore = create<AuthStoreState>()(
           });
           apiClient.setConfig({ apiBase: resolvedBase, managementKey: resolvedKey });
 
-          if (wasLoggedIn && resolvedBase && resolvedKey) {
-            try {
-              await get().login({
-                apiBase: resolvedBase,
-                managementKey: resolvedKey,
-                rememberPassword: resolvedRememberPassword
-              });
-              return true;
-            } catch (error) {
-              console.warn('Auto login failed:', error);
-              return false;
+          if (wasLoggedIn && resolvedBase) {
+            const loginAttempts = resolvedKey
+              ? [
+                  { managementKey: resolvedKey, rememberPassword: resolvedRememberPassword },
+                  { managementKey: '', rememberPassword: true }
+                ]
+              : [{ managementKey: '', rememberPassword: true }];
+
+            for (const attempt of loginAttempts) {
+              try {
+                await get().login({
+                  apiBase: resolvedBase,
+                  managementKey: attempt.managementKey,
+                  rememberPassword: attempt.rememberPassword
+                });
+                return true;
+              } catch (error) {
+                console.warn('Auto login failed:', error);
+              }
             }
           }
 
@@ -90,7 +98,8 @@ export const useAuthStore = create<AuthStoreState>()(
       login: async (credentials) => {
         const apiBase = normalizeApiBase(credentials.apiBase);
         const managementKey = credentials.managementKey.trim();
-        const rememberPassword = credentials.rememberPassword ?? get().rememberPassword ?? false;
+        const requestedRememberPassword = credentials.rememberPassword ?? get().rememberPassword ?? false;
+        const rememberPassword = managementKey ? requestedRememberPassword : true;
 
         try {
           set({ connectionStatus: 'connecting' });
@@ -114,10 +123,15 @@ export const useAuthStore = create<AuthStoreState>()(
             connectionStatus: 'connected',
             connectionError: null
           });
-          if (rememberPassword) {
-            localStorage.setItem('isLoggedIn', 'true');
+          if (managementKey) {
+            if (rememberPassword) {
+              localStorage.setItem('isLoggedIn', 'true');
+            } else {
+              localStorage.removeItem('isLoggedIn');
+            }
           } else {
-            localStorage.removeItem('isLoggedIn');
+            obfuscatedStorage.removeItem('managementKey');
+            localStorage.setItem('isLoggedIn', 'true');
           }
         } catch (error: unknown) {
           const message =
@@ -155,7 +169,7 @@ export const useAuthStore = create<AuthStoreState>()(
       checkAuth: async () => {
         const { managementKey, apiBase } = get();
 
-        if (!managementKey || !apiBase) {
+        if (!apiBase) {
           return false;
         }
 
