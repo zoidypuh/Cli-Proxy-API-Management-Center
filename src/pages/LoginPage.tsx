@@ -19,6 +19,10 @@ import styles from './LoginPage.module.scss';
  */
 type RedirectState = { from?: { pathname?: string } };
 
+const uniqueNonEmpty = (values: string[]): string[] => {
+  return Array.from(new Set(values.map((value) => normalizeApiBase(value)).filter(Boolean)));
+};
+
 function getLocalizedErrorMessage(error: unknown, t: (key: string) => string): string {
   const apiError = error as Partial<ApiError>;
   const status = typeof apiError.status === 'number' ? apiError.status : undefined;
@@ -124,26 +128,30 @@ export function LoginPage() {
             navigate(redirect, { replace: true });
           }, 1500);
         } else {
-          const baseToUse = normalizeApiBase(storedBase || detectedBase);
-          setApiBase(baseToUse);
+          const baseCandidates = uniqueNonEmpty([detectedBase, storedBase]);
+          const initialBase = baseCandidates[0] || detectedBase;
+          setApiBase(initialBase);
           setManagementKey(storedKey || '');
           setRememberPassword(storedRememberPassword || Boolean(storedKey));
 
-          try {
-            await login({
-              apiBase: baseToUse,
-              managementKey: '',
-              rememberPassword: true
-            });
-            keepSplashVisible = true;
-            setAutoLoginSuccess(true);
-            setTimeout(() => {
-              const redirect = (location.state as RedirectState | null)?.from?.pathname || '/';
-              navigate(redirect, { replace: true });
-            }, 1500);
-          } catch {
-            setManagementKey(storedKey || '');
-            setRememberPassword(storedRememberPassword || Boolean(storedKey));
+          for (const candidateBase of baseCandidates) {
+            try {
+              await login({
+                apiBase: candidateBase,
+                managementKey: '',
+                rememberPassword: true
+              });
+              keepSplashVisible = true;
+              setAutoLoginSuccess(true);
+              setTimeout(() => {
+                const redirect = (location.state as RedirectState | null)?.from?.pathname || '/';
+                navigate(redirect, { replace: true });
+              }, 1500);
+              break;
+            } catch {
+              setManagementKey(storedKey || '');
+              setRememberPassword(storedRememberPassword || Boolean(storedKey));
+            }
           }
         }
       } finally {
