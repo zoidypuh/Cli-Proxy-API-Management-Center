@@ -1042,8 +1042,10 @@
     "request_events_no_result_title": "No matching events",
     "request_events_no_result_desc": "Try different filters or clear the current filters.",
     "request_events_count": "{{count}} events",
+    "request_events_filtered_total_tokens": "Filtered Total Tokens",
     "request_events_limit_hint": "Showing {{shown}} of {{total}} events to keep rendering responsive.",
     "input_tokens": "Input Tokens",
+    "fresh_input_tokens": "Fresh Input Tokens",
     "output_tokens": "Output Tokens",
     "last_updated": "Updated"
   },

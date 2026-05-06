@@ -41,6 +41,7 @@ type RequestEventRow = {
   thinking: UsageThinking | null;
   thinkingLabel: string;
   inputTokens: number;
+  freshInputTokens: number;
   outputTokens: number;
   reasoningTokens: number;
   cachedTokens: number;
@@ -186,6 +187,7 @@ export function RequestEventsDetailsCard({
         Math.max(toNumber(detail.tokens?.cached_tokens), 0),
         Math.max(toNumber(detail.tokens?.cache_tokens), 0)
       );
+      const freshInputTokens = Math.max(inputTokens - cachedTokens, 0);
       const totalTokens = Math.max(
         toNumber(detail.tokens?.total_tokens),
         extractTotalTokens(detail)
@@ -210,6 +212,7 @@ export function RequestEventsDetailsCard({
         thinking,
         thinkingLabel,
         inputTokens,
+        freshInputTokens,
         outputTokens,
         reasoningTokens,
         cachedTokens,
@@ -328,6 +331,10 @@ export function RequestEventsDetailsCard({
   );
 
   const renderedRows = useMemo(() => filteredRows.slice(0, MAX_RENDERED_EVENTS), [filteredRows]);
+  const filteredTotalTokens = useMemo(
+    () => filteredRows.reduce((sum, row) => sum + row.totalTokens, 0),
+    [filteredRows]
+  );
 
   const hasActiveFilters =
     effectiveModelFilter !== ALL_FILTER ||
@@ -356,6 +363,7 @@ export function RequestEventsDetailsCard({
       'thinking_level',
       'thinking_budget',
       'input_tokens',
+      'fresh_input_tokens',
       'output_tokens',
       'reasoning_tokens',
       'cached_tokens',
@@ -376,6 +384,7 @@ export function RequestEventsDetailsCard({
         row.thinking?.level ?? '',
         row.thinking?.budget ?? '',
         row.inputTokens,
+        row.freshInputTokens,
         row.outputTokens,
         row.reasoningTokens,
         row.cachedTokens,
@@ -407,6 +416,7 @@ export function RequestEventsDetailsCard({
       ...(row.thinking ? { thinking: row.thinking } : {}),
       tokens: {
         input_tokens: row.inputTokens,
+        fresh_input_tokens: row.freshInputTokens,
         output_tokens: row.outputTokens,
         reasoning_tokens: row.reasoningTokens,
         cached_tokens: row.cachedTokens,
@@ -494,6 +504,10 @@ export function RequestEventsDetailsCard({
             fullWidth={false}
           />
         </div>
+        <div className={styles.requestEventsTokenSummary}>
+          <span>{t('usage_stats.request_events_filtered_total_tokens')}</span>
+          <strong>{filteredTotalTokens.toLocaleString()}</strong>
+        </div>
       </div>
 
       {loading && rows.length === 0 ? (
@@ -535,6 +549,7 @@ export function RequestEventsDetailsCard({
                   {hasLatencyData && <th title={latencyHint}>{t('usage_stats.time')}</th>}
                   <th>{t('usage_stats.thinking_intensity')}</th>
                   <th>{t('usage_stats.input_tokens')}</th>
+                  <th>{t('usage_stats.fresh_input_tokens')}</th>
                   <th>{t('usage_stats.output_tokens')}</th>
                   <th>{t('usage_stats.reasoning_tokens')}</th>
                   <th>{t('usage_stats.cached_tokens')}</th>
@@ -600,6 +615,7 @@ export function RequestEventsDetailsCard({
                       </span>
                     </td>
                     <td>{row.inputTokens.toLocaleString()}</td>
+                    <td>{row.freshInputTokens.toLocaleString()}</td>
                     <td>{row.outputTokens.toLocaleString()}</td>
                     <td>{row.reasoningTokens.toLocaleString()}</td>
                     <td>{row.cachedTokens.toLocaleString()}</td>

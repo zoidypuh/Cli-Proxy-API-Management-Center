@@ -909,6 +909,32 @@
   min-width: 180px;
 }
 
+.requestEventsTokenSummary {
+  margin-left: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  min-width: 180px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+
+  strong {
+    color: var(--text-primary);
+    font-size: 18px;
+    line-height: 36px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+
+  @include mobile {
+    margin-left: 0;
+    width: 100%;
+    align-items: flex-start;
+  }
+}
+
 .requestEventsMeta {
   display: flex;
   align-items: center;

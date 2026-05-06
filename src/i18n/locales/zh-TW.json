@@ -1068,8 +1068,10 @@
     "request_events_no_result_title": "沒有符合結果",
     "request_events_no_result_desc": "請嘗試調整篩選條件，或清空目前篩選。",
     "request_events_count": "{{count}} 條事件",
+    "request_events_filtered_total_tokens": "篩選後總 Tokens",
     "request_events_limit_hint": "為確保渲染效能，僅展示 {{shown}} / {{total}} 條事件。",
     "input_tokens": "輸入 Tokens",
+    "fresh_input_tokens": "新輸入 Tokens",
     "output_tokens": "輸出 Tokens",
     "last_updated": "更新於"
   },
