@@ -75,6 +75,8 @@ type UsagePercentSnapshot = {
   provider: CalibrationProvider;
   fiveHourPercent: number | null;
   sevenDayPercent: number | null;
+  fiveHourResetAt: string | null;
+  sevenDayResetAt: string | null;
 };
 
 type ActiveCalibration = {
@@ -89,6 +91,8 @@ type ActiveCalibration = {
   startTimestampMs: number;
   startFiveHourPercent: number | null;
   startSevenDayPercent: number | null;
+  startFiveHourResetAt: string | null;
+  startSevenDayResetAt: string | null;
 };
 
 type CalibrationTotals = {
@@ -176,11 +180,41 @@ const getWindowPercent = (window: Record<string, unknown> | null): number | null
 const getCodexWindowSeconds = (window: Record<string, unknown> | null): number | null =>
   normalizeNumberValue(window?.limit_window_seconds ?? window?.limitWindowSeconds);
 
+const getWindowResetAt = (window: Record<string, unknown> | null): string | null => {
+  if (!window) return null;
+  const stringReset = window.resets_at ?? window.reset_at ?? window.resetAt;
+  if (typeof stringReset === 'string' && stringReset.trim()) {
+    const trimmed = stringReset.trim();
+    const numeric = Number(trimmed);
+    if (Number.isFinite(numeric) && numeric > 0) {
+      return new Date(numeric * 1000).toISOString();
+    }
+    const date = new Date(trimmed);
+    return Number.isNaN(date.getTime()) ? null : date.toISOString();
+  }
+
+  const resetAtSeconds = normalizeNumberValue(window.reset_at ?? window.resetAt);
+  if (resetAtSeconds !== null && resetAtSeconds > 0) {
+    return new Date(resetAtSeconds * 1000).toISOString();
+  }
+
+  const resetAfterSeconds = normalizeNumberValue(
+    window.reset_after_seconds ?? window.resetAfterSeconds
+  );
+  if (resetAfterSeconds !== null && resetAfterSeconds > 0) {
+    return new Date(Date.now() + resetAfterSeconds * 1000).toISOString();
+  }
+
+  return null;
+};
+
 const formatPercentValue = (value: number | null): string =>
   value === null ? '-' : `${value.toFixed(2)}%`;
 
 const normalizeProvider = (value: unknown): CalibrationProvider | null => {
-  const provider = String(value ?? '').trim().toLowerCase();
+  const provider = String(value ?? '')
+    .trim()
+    .toLowerCase();
   if (provider.includes('codex')) return 'codex';
   if (provider.includes('claude') || provider.includes('anthropic')) return 'claude';
   return null;
@@ -190,12 +224,14 @@ const buildCalibrationWindow = (
   startPercent: number | null,
   endPercent: number | null,
   weightedTokens: number,
-  weights: { freshInput: number; output: number; cached: number }
+  weights: { freshInput: number; output: number; cached: number },
+  resetAt: string | null
 ) => {
   if (startPercent === null || endPercent === null || weightedTokens <= 0) {
     return {
       start_percent: startPercent,
       end_percent: endPercent,
+      reset_at: resetAt,
       delta_percent: null,
       delta_bps: null,
       bps_per_weighted_token: null,
@@ -212,6 +248,7 @@ const buildCalibrationWindow = (
   return {
     start_percent: startPercent,
     end_percent: endPercent,
+    reset_at: resetAt,
     delta_percent: deltaPercent,
     delta_bps: deltaBps,
     bps_per_weighted_token: bpsPerWeightedToken,
@@ -466,7 +503,9 @@ export function RequestEventsDetailsCard({
 
   const findAuthFile = useCallback(
     (authIndex: string) =>
-      authFiles.find((file) => normalizeAuthIndex(file['auth_index'] ?? file.authIndex) === authIndex),
+      authFiles.find(
+        (file) => normalizeAuthIndex(file['auth_index'] ?? file.authIndex) === authIndex
+      ),
     [authFiles]
   );
 
@@ -525,6 +564,8 @@ export function RequestEventsDetailsCard({
           provider,
           fiveHourPercent: getWindowPercent(fiveHour),
           sevenDayPercent: getWindowPercent(sevenDay),
+          fiveHourResetAt: getWindowResetAt(fiveHour),
+          sevenDayResetAt: getWindowResetAt(sevenDay),
         };
       }
 
@@ -545,6 +586,8 @@ export function RequestEventsDetailsCard({
         provider,
         fiveHourPercent: getWindowPercent(getNestedRecord(payloadRecord, 'five_hour')),
         sevenDayPercent: getWindowPercent(getNestedRecord(payloadRecord, 'seven_day')),
+        fiveHourResetAt: getWindowResetAt(getNestedRecord(payloadRecord, 'five_hour')),
+        sevenDayResetAt: getWindowResetAt(getNestedRecord(payloadRecord, 'seven_day')),
       };
     },
     [findAuthFile, t]
@@ -637,6 +680,8 @@ export function RequestEventsDetailsCard({
         startTimestampMs: calibrationSeedRow.timestampMs,
         startFiveHourPercent: snapshot.fiveHourPercent,
         startSevenDayPercent: snapshot.sevenDayPercent,
+        startFiveHourResetAt: snapshot.fiveHourResetAt,
+        startSevenDayResetAt: snapshot.sevenDayResetAt,
       });
       setCalibrationStatus(t('usage_stats.calibration_status_started'));
     } catch (error) {
@@ -683,13 +728,15 @@ export function RequestEventsDetailsCard({
         activeCalibration.startFiveHourPercent,
         endSnapshot.fiveHourPercent,
         weightedCalibrationTokens,
-        parsedCalibrationWeights
+        parsedCalibrationWeights,
+        endSnapshot.fiveHourResetAt ?? activeCalibration.startFiveHourResetAt
       );
       const sevenDay = buildCalibrationWindow(
         activeCalibration.startSevenDayPercent,
         endSnapshot.sevenDayPercent,
         weightedCalibrationTokens,
-        parsedCalibrationWeights
+        parsedCalibrationWeights,
+        endSnapshot.sevenDayResetAt ?? activeCalibration.startSevenDayResetAt
       );
       const hasDelta =
         (typeof fiveHour.delta_bps === 'number' && fiveHour.delta_bps > 0) ||
@@ -1034,9 +1081,7 @@ export function RequestEventsDetailsCard({
               </div>
             </>
           )}
-          {calibrationStatus && (
-            <div className={styles.calibrationStatus}>{calibrationStatus}</div>
-          )}
+          {calibrationStatus && <div className={styles.calibrationStatus}>{calibrationStatus}</div>}
           {calibrationError && <div className={styles.errorBox}>{calibrationError}</div>}
         </div>
       )}
