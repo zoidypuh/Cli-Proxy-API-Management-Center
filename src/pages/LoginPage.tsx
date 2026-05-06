@@ -19,6 +19,10 @@ import styles from './LoginPage.module.scss';
  */
 type RedirectState = { from?: { pathname?: string } };
 
+const uniqueNonEmpty = (values: string[]): string[] => {
+  return Array.from(new Set(values.map((value) => normalizeApiBase(value)).filter(Boolean)));
+};
+
 function getLocalizedErrorMessage(error: unknown, t: (key: string) => string): string {
   const apiError = error as Partial<ApiError>;
   const status = typeof apiError.status === 'number' ? apiError.status : undefined;
@@ -111,9 +115,12 @@ export function LoginPage() {
 
   useEffect(() => {
     const init = async () => {
+      let keepSplashVisible = false;
+
       try {
         const autoLoggedIn = await restoreSession();
         if (autoLoggedIn) {
+          keepSplashVisible = true;
           setAutoLoginSuccess(true);
           // 延迟跳转，让用户看到成功动画
           setTimeout(() => {
@@ -121,12 +128,34 @@ export function LoginPage() {
             navigate(redirect, { replace: true });
           }, 1500);
         } else {
-          setApiBase(storedBase || detectedBase);
+          const baseCandidates = uniqueNonEmpty([detectedBase, storedBase]);
+          const initialBase = baseCandidates[0] || detectedBase;
+          setApiBase(initialBase);
           setManagementKey(storedKey || '');
           setRememberPassword(storedRememberPassword || Boolean(storedKey));
+
+          for (const candidateBase of baseCandidates) {
+            try {
+              await login({
+                apiBase: candidateBase,
+                managementKey: '',
+                rememberPassword: true
+              });
+              keepSplashVisible = true;
+              setAutoLoginSuccess(true);
+              setTimeout(() => {
+                const redirect = (location.state as RedirectState | null)?.from?.pathname || '/';
+                navigate(redirect, { replace: true });
+              }, 1500);
+              break;
+            } catch {
+              setManagementKey(storedKey || '');
+              setRememberPassword(storedRememberPassword || Boolean(storedKey));
+            }
+          }
         }
       } finally {
-        if (!autoLoginSuccess) {
+        if (!keepSplashVisible) {
           setAutoLoading(false);
         }
       }
@@ -137,11 +166,6 @@ export function LoginPage() {
   }, []);
 
   const handleSubmit = useCallback(async () => {
-    if (!managementKey.trim()) {
-      setError(t('login.error_required'));
-      return;
-    }
-
     const baseToUse = apiBase ? normalizeApiBase(apiBase) : detectedBase;
     setLoading(true);
     setError('');

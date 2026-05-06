@@ -10,5 +10,7 @@ export * from './provider';
 export * from './ampcode';
 export * from './authFile';
 export * from './oauth';
+export * from './usage';
 export * from './log';
 export * from './quota';
+export * from './sourceInfo';

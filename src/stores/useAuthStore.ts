@@ -28,6 +28,10 @@ interface AuthStoreState extends AuthState {
 
 let restoreSessionPromise: Promise<boolean> | null = null;
 
+const uniqueNonEmpty = (values: string[]): string[] => {
+  return Array.from(new Set(values.map((value) => normalizeApiBase(value)).filter(Boolean)));
+};
+
 export const useAuthStore = create<AuthStoreState>()(
   persist(
     (set, get) => ({
@@ -55,7 +59,9 @@ export const useAuthStore = create<AuthStoreState>()(
           const legacyKey = obfuscatedStorage.getItem<string>('managementKey');
 
           const { apiBase, managementKey, rememberPassword } = get();
-          const resolvedBase = normalizeApiBase(apiBase || legacyBase || detectApiBaseFromLocation());
+          const detectedBase = detectApiBaseFromLocation();
+          const baseCandidates = uniqueNonEmpty([detectedBase, apiBase, legacyBase || '']);
+          const resolvedBase = baseCandidates[0] || '';
           const resolvedKey = managementKey || legacyKey || '';
           const resolvedRememberPassword = rememberPassword || Boolean(managementKey) || Boolean(legacyKey);
 
@@ -66,17 +72,27 @@ export const useAuthStore = create<AuthStoreState>()(
           });
           apiClient.setConfig({ apiBase: resolvedBase, managementKey: resolvedKey });
 
-          if (wasLoggedIn && resolvedBase && resolvedKey) {
-            try {
-              await get().login({
-                apiBase: resolvedBase,
-                managementKey: resolvedKey,
-                rememberPassword: resolvedRememberPassword
-              });
-              return true;
-            } catch (error) {
-              console.warn('Auto login failed:', error);
-              return false;
+          if (wasLoggedIn && baseCandidates.length > 0) {
+            const loginAttempts = resolvedKey
+              ? [
+                  { managementKey: '', rememberPassword: true },
+                  { managementKey: resolvedKey, rememberPassword: resolvedRememberPassword }
+                ]
+              : [{ managementKey: '', rememberPassword: true }];
+
+            for (const candidateBase of baseCandidates) {
+              for (const attempt of loginAttempts) {
+                try {
+                  await get().login({
+                    apiBase: candidateBase,
+                    managementKey: attempt.managementKey,
+                    rememberPassword: attempt.rememberPassword
+                  });
+                  return true;
+                } catch (error) {
+                  console.warn('Auto login failed:', error);
+                }
+              }
             }
           }
 
@@ -90,7 +106,8 @@ export const useAuthStore = create<AuthStoreState>()(
       login: async (credentials) => {
         const apiBase = normalizeApiBase(credentials.apiBase);
         const managementKey = credentials.managementKey.trim();
-        const rememberPassword = credentials.rememberPassword ?? get().rememberPassword ?? false;
+        const requestedRememberPassword = credentials.rememberPassword ?? get().rememberPassword ?? false;
+        const rememberPassword = managementKey ? requestedRememberPassword : true;
 
         try {
           set({ connectionStatus: 'connecting' });
@@ -114,10 +131,15 @@ export const useAuthStore = create<AuthStoreState>()(
             connectionStatus: 'connected',
             connectionError: null
           });
-          if (rememberPassword) {
-            localStorage.setItem('isLoggedIn', 'true');
+          if (managementKey) {
+            if (rememberPassword) {
+              localStorage.setItem('isLoggedIn', 'true');
+            } else {
+              localStorage.removeItem('isLoggedIn');
+            }
           } else {
-            localStorage.removeItem('isLoggedIn');
+            obfuscatedStorage.removeItem('managementKey');
+            localStorage.setItem('isLoggedIn', 'true');
           }
         } catch (error: unknown) {
           const message =
@@ -155,7 +177,7 @@ export const useAuthStore = create<AuthStoreState>()(
       checkAuth: async () => {
         const { managementKey, apiBase } = get();
 
-        if (!managementKey || !apiBase) {
+        if (!apiBase) {
           return false;
         }
 
