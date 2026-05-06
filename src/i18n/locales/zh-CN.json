@@ -1046,6 +1046,7 @@
     "request_events_no_result_title": "没有匹配结果",
     "request_events_no_result_desc": "请尝试调整筛选条件，或清空当前筛选。",
     "request_events_count": "{{count}} 条事件",
+    "request_events_filtered_tokens": "筛选后 Tokens",
     "request_events_filtered_total_tokens": "筛选后总 Tokens",
     "request_events_limit_hint": "为保证渲染性能，仅展示 {{shown}} / {{total}} 条事件。",
     "calibration_start": "开始校准",
