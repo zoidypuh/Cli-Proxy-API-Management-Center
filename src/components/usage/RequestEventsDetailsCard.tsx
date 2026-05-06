@@ -1,15 +1,28 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
+import { apiCallApi, getApiCallErrorMessage } from '@/services/api/apiCall';
 import { authFilesApi } from '@/services/api/authFiles';
+import { usageApi } from '@/services/api/usage';
 import type { GeminiKeyConfig, ProviderKeyConfig, OpenAIProviderConfig } from '@/types';
 import type { AuthFileItem } from '@/types/authFile';
 import type { CredentialInfo } from '@/types/sourceInfo';
 import { buildSourceInfoMap, resolveSourceDisplay } from '@/utils/sourceResolver';
 import { parseTimestampMs } from '@/utils/timestamp';
+import {
+  CLAUDE_REQUEST_HEADERS,
+  CLAUDE_USAGE_URL,
+  CODEX_REQUEST_HEADERS,
+  CODEX_USAGE_URL,
+  normalizeNumberValue,
+  parseClaudeUsagePayload,
+  parseCodexUsagePayload,
+  resolveCodexChatgptAccountId,
+} from '@/utils/quota';
 import {
   collectUsageDetails,
   extractLatencyMs,
@@ -24,6 +37,14 @@ import styles from '@/pages/UsagePage.module.scss';
 
 const ALL_FILTER = '__all__';
 const MAX_RENDERED_EVENTS = 500;
+const CODEX_FIVE_HOUR_SECONDS = 5 * 60 * 60;
+const CODEX_SEVEN_DAY_SECONDS = 7 * 24 * 60 * 60;
+
+const DEFAULT_CALIBRATION_WEIGHTS = {
+  freshInput: '2.5',
+  output: '10',
+  cached: '0.25',
+};
 
 type RequestEventRow = {
   id: string;
@@ -46,6 +67,36 @@ type RequestEventRow = {
   reasoningTokens: number;
   cachedTokens: number;
   totalTokens: number;
+};
+
+type CalibrationProvider = 'codex' | 'claude';
+
+type UsagePercentSnapshot = {
+  provider: CalibrationProvider;
+  fiveHourPercent: number | null;
+  sevenDayPercent: number | null;
+};
+
+type ActiveCalibration = {
+  provider: CalibrationProvider;
+  model: string;
+  sourceKey: string;
+  source: string;
+  sourceType: string;
+  authIndex: string;
+  startedAt: string;
+  startTimestamp: string;
+  startTimestampMs: number;
+  startFiveHourPercent: number | null;
+  startSevenDayPercent: number | null;
+};
+
+type CalibrationTotals = {
+  freshInput: number;
+  output: number;
+  cached: number;
+  total: number;
+  rows: number;
 };
 
 export interface RequestEventsDetailsCardProps {
@@ -102,6 +153,74 @@ const encodeCsv = (value: string | number): string => {
   return `"${safeText.replace(/"/g, '""')}"`;
 };
 
+const getRecord = (value: unknown): Record<string, unknown> | null => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+};
+
+const getNestedRecord = (
+  value: Record<string, unknown> | null,
+  ...keys: string[]
+): Record<string, unknown> | null => {
+  if (!value) return null;
+  for (const key of keys) {
+    const nested = getRecord(value[key]);
+    if (nested) return nested;
+  }
+  return null;
+};
+
+const getWindowPercent = (window: Record<string, unknown> | null): number | null =>
+  normalizeNumberValue(window?.used_percent ?? window?.usedPercent ?? window?.utilization);
+
+const getCodexWindowSeconds = (window: Record<string, unknown> | null): number | null =>
+  normalizeNumberValue(window?.limit_window_seconds ?? window?.limitWindowSeconds);
+
+const formatPercentValue = (value: number | null): string =>
+  value === null ? '-' : `${value.toFixed(2)}%`;
+
+const normalizeProvider = (value: unknown): CalibrationProvider | null => {
+  const provider = String(value ?? '').trim().toLowerCase();
+  if (provider.includes('codex')) return 'codex';
+  if (provider.includes('claude') || provider.includes('anthropic')) return 'claude';
+  return null;
+};
+
+const buildCalibrationWindow = (
+  startPercent: number | null,
+  endPercent: number | null,
+  weightedTokens: number,
+  weights: { freshInput: number; output: number; cached: number }
+) => {
+  if (startPercent === null || endPercent === null || weightedTokens <= 0) {
+    return {
+      start_percent: startPercent,
+      end_percent: endPercent,
+      delta_percent: null,
+      delta_bps: null,
+      bps_per_weighted_token: null,
+      bps_per_fresh_input_token: null,
+      bps_per_output_token: null,
+      bps_per_cached_token: null,
+    };
+  }
+
+  const deltaPercent = endPercent - startPercent;
+  const deltaBps = deltaPercent * 100;
+  const bpsPerWeightedToken = deltaBps / weightedTokens;
+
+  return {
+    start_percent: startPercent,
+    end_percent: endPercent,
+    delta_percent: deltaPercent,
+    delta_bps: deltaBps,
+    bps_per_weighted_token: bpsPerWeightedToken,
+    bps_per_fresh_input_token: bpsPerWeightedToken * weights.freshInput,
+    bps_per_output_token: bpsPerWeightedToken * weights.output,
+    bps_per_cached_token: bpsPerWeightedToken * weights.cached,
+  };
+};
+
 export function RequestEventsDetailsCard({
   usage,
   loading,
@@ -120,7 +239,13 @@ export function RequestEventsDetailsCard({
   const [modelFilter, setModelFilter] = useState(ALL_FILTER);
   const [sourceFilter, setSourceFilter] = useState(ALL_FILTER);
   const [authIndexFilter, setAuthIndexFilter] = useState(ALL_FILTER);
+  const [authFiles, setAuthFiles] = useState<AuthFileItem[]>([]);
   const [authFileMap, setAuthFileMap] = useState<Map<string, CredentialInfo>>(new Map());
+  const [activeCalibration, setActiveCalibration] = useState<ActiveCalibration | null>(null);
+  const [calibrationWeights, setCalibrationWeights] = useState(DEFAULT_CALIBRATION_WEIGHTS);
+  const [calibrationBusy, setCalibrationBusy] = useState(false);
+  const [calibrationError, setCalibrationError] = useState('');
+  const [calibrationStatus, setCalibrationStatus] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -130,6 +255,7 @@ export function RequestEventsDetailsCard({
         if (cancelled) return;
         const files = Array.isArray(res) ? res : (res as { files?: AuthFileItem[] })?.files;
         if (!Array.isArray(files)) return;
+        setAuthFiles(files);
         const map = new Map<string, CredentialInfo>();
         files.forEach((file) => {
           const key = normalizeAuthIndex(file['auth_index'] ?? file.authIndex);
@@ -335,11 +461,285 @@ export function RequestEventsDetailsCard({
     () => filteredRows.reduce((sum, row) => sum + row.totalTokens, 0),
     [filteredRows]
   );
+  const calibrationSeedRow = filteredRows[0] ?? null;
+  const isCalibrationActive = activeCalibration !== null;
+
+  const findAuthFile = useCallback(
+    (authIndex: string) =>
+      authFiles.find((file) => normalizeAuthIndex(file['auth_index'] ?? file.authIndex) === authIndex),
+    [authFiles]
+  );
+
+  const fetchUsagePercentSnapshot = useCallback(
+    async (row: RequestEventRow): Promise<UsagePercentSnapshot> => {
+      const authFile = findAuthFile(row.authIndex);
+      const provider =
+        normalizeProvider(authFile?.type) ??
+        normalizeProvider(authFile?.provider) ??
+        normalizeProvider(row.sourceType);
+
+      if (!authFile || !provider) {
+        throw new Error(t('usage_stats.calibration_unsupported_provider'));
+      }
+
+      if (provider === 'codex') {
+        const accountId = resolveCodexChatgptAccountId(authFile);
+        if (!accountId) {
+          throw new Error(t('usage_stats.calibration_missing_account'));
+        }
+
+        const result = await apiCallApi.request({
+          authIndex: row.authIndex,
+          method: 'GET',
+          url: CODEX_USAGE_URL,
+          header: {
+            ...CODEX_REQUEST_HEADERS,
+            'Chatgpt-Account-Id': accountId,
+          },
+        });
+
+        if (result.statusCode < 200 || result.statusCode >= 300) {
+          throw new Error(getApiCallErrorMessage(result));
+        }
+
+        const payload = parseCodexUsagePayload(result.body ?? result.bodyText);
+        const rateLimit = getNestedRecord(getRecord(payload), 'rate_limit', 'rateLimit');
+        const primary = getNestedRecord(rateLimit, 'primary_window', 'primaryWindow');
+        const secondary = getNestedRecord(rateLimit, 'secondary_window', 'secondaryWindow');
+        const primarySeconds = getCodexWindowSeconds(primary);
+        const secondarySeconds = getCodexWindowSeconds(secondary);
+        const fiveHour =
+          primarySeconds === CODEX_FIVE_HOUR_SECONDS
+            ? primary
+            : secondarySeconds === CODEX_FIVE_HOUR_SECONDS
+              ? secondary
+              : primary;
+        const sevenDay =
+          primarySeconds === CODEX_SEVEN_DAY_SECONDS
+            ? primary
+            : secondarySeconds === CODEX_SEVEN_DAY_SECONDS
+              ? secondary
+              : secondary;
+
+        return {
+          provider,
+          fiveHourPercent: getWindowPercent(fiveHour),
+          sevenDayPercent: getWindowPercent(sevenDay),
+        };
+      }
+
+      const result = await apiCallApi.request({
+        authIndex: row.authIndex,
+        method: 'GET',
+        url: CLAUDE_USAGE_URL,
+        header: CLAUDE_REQUEST_HEADERS,
+      });
+
+      if (result.statusCode < 200 || result.statusCode >= 300) {
+        throw new Error(getApiCallErrorMessage(result));
+      }
+
+      const payload = parseClaudeUsagePayload(result.body ?? result.bodyText);
+      const payloadRecord = getRecord(payload);
+      return {
+        provider,
+        fiveHourPercent: getWindowPercent(getNestedRecord(payloadRecord, 'five_hour')),
+        sevenDayPercent: getWindowPercent(getNestedRecord(payloadRecord, 'seven_day')),
+      };
+    },
+    [findAuthFile, t]
+  );
+
+  const calibrationRows = useMemo(
+    () =>
+      activeCalibration
+        ? rows.filter(
+            (row) =>
+              row.timestampMs > activeCalibration.startTimestampMs &&
+              row.model === activeCalibration.model &&
+              row.sourceKey === activeCalibration.sourceKey &&
+              row.authIndex === activeCalibration.authIndex
+          )
+        : [],
+    [activeCalibration, rows]
+  );
+
+  const calibrationTotals = useMemo<CalibrationTotals>(
+    () =>
+      calibrationRows.reduce(
+        (totals, row) => ({
+          freshInput: totals.freshInput + row.freshInputTokens,
+          output: totals.output + row.outputTokens,
+          cached: totals.cached + row.cachedTokens,
+          total: totals.total + row.totalTokens,
+          rows: totals.rows + 1,
+        }),
+        { freshInput: 0, output: 0, cached: 0, total: 0, rows: 0 }
+      ),
+    [calibrationRows]
+  );
+
+  const parsedCalibrationWeights = useMemo(() => {
+    const freshInput = Number(calibrationWeights.freshInput);
+    const output = Number(calibrationWeights.output);
+    const cached = Number(calibrationWeights.cached);
+    if (
+      !Number.isFinite(freshInput) ||
+      !Number.isFinite(output) ||
+      !Number.isFinite(cached) ||
+      freshInput < 0 ||
+      output < 0 ||
+      cached < 0
+    ) {
+      return null;
+    }
+    return { freshInput, output, cached };
+  }, [calibrationWeights]);
+
+  const weightedCalibrationTokens = useMemo(() => {
+    if (!parsedCalibrationWeights) return null;
+    return (
+      calibrationTotals.freshInput * parsedCalibrationWeights.freshInput +
+      calibrationTotals.output * parsedCalibrationWeights.output +
+      calibrationTotals.cached * parsedCalibrationWeights.cached
+    );
+  }, [calibrationTotals, parsedCalibrationWeights]);
 
   const hasActiveFilters =
     effectiveModelFilter !== ALL_FILTER ||
     effectiveSourceFilter !== ALL_FILTER ||
     effectiveAuthIndexFilter !== ALL_FILTER;
+
+  const handleStartCalibration = async () => {
+    if (!calibrationSeedRow) {
+      setCalibrationError(t('usage_stats.calibration_error_no_rows'));
+      return;
+    }
+
+    setCalibrationBusy(true);
+    setCalibrationError('');
+    setCalibrationStatus('');
+    try {
+      const snapshot = await fetchUsagePercentSnapshot(calibrationSeedRow);
+      if (snapshot.fiveHourPercent === null && snapshot.sevenDayPercent === null) {
+        throw new Error(t('usage_stats.calibration_error_no_usage'));
+      }
+
+      setActiveCalibration({
+        provider: snapshot.provider,
+        model: calibrationSeedRow.model,
+        sourceKey: calibrationSeedRow.sourceKey,
+        source: calibrationSeedRow.source,
+        sourceType: calibrationSeedRow.sourceType,
+        authIndex: calibrationSeedRow.authIndex,
+        startedAt: new Date().toISOString(),
+        startTimestamp: calibrationSeedRow.timestamp,
+        startTimestampMs: calibrationSeedRow.timestampMs,
+        startFiveHourPercent: snapshot.fiveHourPercent,
+        startSevenDayPercent: snapshot.sevenDayPercent,
+      });
+      setCalibrationStatus(t('usage_stats.calibration_status_started'));
+    } catch (error) {
+      setCalibrationError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setCalibrationBusy(false);
+    }
+  };
+
+  const handleCancelCalibration = () => {
+    setActiveCalibration(null);
+    setCalibrationError('');
+    setCalibrationStatus('');
+  };
+
+  const handleFinishCalibration = async () => {
+    if (!activeCalibration) return;
+    if (!parsedCalibrationWeights) {
+      setCalibrationError(t('usage_stats.calibration_error_weights'));
+      return;
+    }
+    if (!weightedCalibrationTokens || weightedCalibrationTokens <= 0) {
+      setCalibrationError(t('usage_stats.calibration_error_no_tokens'));
+      return;
+    }
+
+    const endRow = rows.find(
+      (row) =>
+        row.model === activeCalibration.model &&
+        row.sourceKey === activeCalibration.sourceKey &&
+        row.authIndex === activeCalibration.authIndex
+    );
+    if (!endRow) {
+      setCalibrationError(t('usage_stats.calibration_error_no_rows'));
+      return;
+    }
+
+    setCalibrationBusy(true);
+    setCalibrationError('');
+    setCalibrationStatus('');
+    try {
+      const endSnapshot = await fetchUsagePercentSnapshot(endRow);
+      const fiveHour = buildCalibrationWindow(
+        activeCalibration.startFiveHourPercent,
+        endSnapshot.fiveHourPercent,
+        weightedCalibrationTokens,
+        parsedCalibrationWeights
+      );
+      const sevenDay = buildCalibrationWindow(
+        activeCalibration.startSevenDayPercent,
+        endSnapshot.sevenDayPercent,
+        weightedCalibrationTokens,
+        parsedCalibrationWeights
+      );
+      const hasDelta =
+        (typeof fiveHour.delta_bps === 'number' && fiveHour.delta_bps > 0) ||
+        (typeof sevenDay.delta_bps === 'number' && sevenDay.delta_bps > 0);
+
+      if (!hasDelta) {
+        throw new Error(t('usage_stats.calibration_error_no_delta'));
+      }
+
+      const record = {
+        type: 'usage_percent_token_weight_calibration',
+        provider: activeCalibration.provider,
+        model: activeCalibration.model,
+        source: activeCalibration.source,
+        source_key: activeCalibration.sourceKey,
+        source_type: activeCalibration.sourceType,
+        auth_index: activeCalibration.authIndex,
+        started_at: activeCalibration.startedAt,
+        finished_at: new Date().toISOString(),
+        start_event_timestamp: activeCalibration.startTimestamp,
+        start_event_timestamp_ms: activeCalibration.startTimestampMs,
+        assumption: 'Weighted tokens are treated as exact usage cost units.',
+        weights: {
+          fresh_input: parsedCalibrationWeights.freshInput,
+          output: parsedCalibrationWeights.output,
+          cached: parsedCalibrationWeights.cached,
+        },
+        sample: {
+          rows: calibrationTotals.rows,
+          fresh_input_tokens: calibrationTotals.freshInput,
+          output_tokens: calibrationTotals.output,
+          cached_tokens: calibrationTotals.cached,
+          total_tokens: calibrationTotals.total,
+          weighted_tokens: weightedCalibrationTokens,
+        },
+        windows: {
+          five_hour: fiveHour,
+          seven_day: sevenDay,
+        },
+      };
+
+      await usageApi.saveCalibration(record);
+      setActiveCalibration(null);
+      setCalibrationStatus(t('usage_stats.calibration_status_saved'));
+    } catch (error) {
+      setCalibrationError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setCalibrationBusy(false);
+    }
+  };
 
   const handleClearFilters = () => {
     setModelFilter(ALL_FILTER);
@@ -474,6 +874,7 @@ export function RequestEventsDetailsCard({
             options={modelOptions}
             onChange={setModelFilter}
             className={styles.requestEventsSelect}
+            disabled={isCalibrationActive}
             ariaLabel={t('usage_stats.request_events_filter_model')}
             fullWidth={false}
           />
@@ -487,6 +888,7 @@ export function RequestEventsDetailsCard({
             options={sourceOptions}
             onChange={setSourceFilter}
             className={styles.requestEventsSelect}
+            disabled={isCalibrationActive}
             ariaLabel={t('usage_stats.request_events_filter_source')}
             fullWidth={false}
           />
@@ -500,15 +902,144 @@ export function RequestEventsDetailsCard({
             options={authIndexOptions}
             onChange={setAuthIndexFilter}
             className={styles.requestEventsSelect}
+            disabled={isCalibrationActive}
             ariaLabel={t('usage_stats.request_events_filter_auth_index')}
             fullWidth={false}
           />
         </div>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={handleStartCalibration}
+          disabled={isCalibrationActive || !calibrationSeedRow}
+          loading={calibrationBusy && !isCalibrationActive}
+        >
+          {t('usage_stats.calibration_start')}
+        </Button>
         <div className={styles.requestEventsTokenSummary}>
           <span>{t('usage_stats.request_events_filtered_total_tokens')}</span>
           <strong>{filteredTotalTokens.toLocaleString()}</strong>
         </div>
       </div>
+
+      {(activeCalibration || calibrationError || calibrationStatus) && (
+        <div className={styles.calibrationPanel}>
+          {activeCalibration && (
+            <>
+              <div className={styles.calibrationHeader}>
+                <div>
+                  <strong>{t('usage_stats.calibration_active_title')}</strong>
+                  <span>
+                    {t('usage_stats.calibration_target', {
+                      model: activeCalibration.model,
+                      provider: activeCalibration.provider,
+                      authIndex: activeCalibration.authIndex,
+                    })}
+                  </span>
+                </div>
+                <div className={styles.calibrationUsageSnapshot}>
+                  <span>
+                    {t('usage_stats.calibration_start_usage', {
+                      fiveHour: formatPercentValue(activeCalibration.startFiveHourPercent),
+                      sevenDay: formatPercentValue(activeCalibration.startSevenDayPercent),
+                    })}
+                  </span>
+                </div>
+              </div>
+
+              <div className={styles.calibrationGrid}>
+                <div className={styles.calibrationMetric}>
+                  <span>{t('usage_stats.calibration_sample_rows')}</span>
+                  <strong>{calibrationTotals.rows.toLocaleString()}</strong>
+                </div>
+                <div className={styles.calibrationMetric}>
+                  <span>{t('usage_stats.fresh_input_tokens')}</span>
+                  <strong>{calibrationTotals.freshInput.toLocaleString()}</strong>
+                </div>
+                <div className={styles.calibrationMetric}>
+                  <span>{t('usage_stats.output_tokens')}</span>
+                  <strong>{calibrationTotals.output.toLocaleString()}</strong>
+                </div>
+                <div className={styles.calibrationMetric}>
+                  <span>{t('usage_stats.cached_tokens')}</span>
+                  <strong>{calibrationTotals.cached.toLocaleString()}</strong>
+                </div>
+                <div className={styles.calibrationMetric}>
+                  <span>{t('usage_stats.calibration_weighted_tokens')}</span>
+                  <strong>{weightedCalibrationTokens?.toLocaleString() ?? '-'}</strong>
+                </div>
+              </div>
+
+              <div className={styles.calibrationWeights}>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  label={t('usage_stats.calibration_weight_fresh_input')}
+                  value={calibrationWeights.freshInput}
+                  onChange={(event) =>
+                    setCalibrationWeights((current) => ({
+                      ...current,
+                      freshInput: event.target.value,
+                    }))
+                  }
+                  disabled={calibrationBusy}
+                />
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  label={t('usage_stats.calibration_weight_output')}
+                  value={calibrationWeights.output}
+                  onChange={(event) =>
+                    setCalibrationWeights((current) => ({
+                      ...current,
+                      output: event.target.value,
+                    }))
+                  }
+                  disabled={calibrationBusy}
+                />
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  label={t('usage_stats.calibration_weight_cached')}
+                  value={calibrationWeights.cached}
+                  onChange={(event) =>
+                    setCalibrationWeights((current) => ({
+                      ...current,
+                      cached: event.target.value,
+                    }))
+                  }
+                  disabled={calibrationBusy}
+                />
+                <div className={styles.calibrationActions}>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleCancelCalibration}
+                    disabled={calibrationBusy}
+                  >
+                    {t('usage_stats.calibration_cancel')}
+                  </Button>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={handleFinishCalibration}
+                    loading={calibrationBusy}
+                  >
+                    {t('usage_stats.calibration_finish')}
+                  </Button>
+                </div>
+              </div>
+            </>
+          )}
+          {calibrationStatus && (
+            <div className={styles.calibrationStatus}>{calibrationStatus}</div>
+          )}
+          {calibrationError && <div className={styles.errorBox}>{calibrationError}</div>}
+        </div>
+      )}
 
       {loading && rows.length === 0 ? (
         <div className={styles.hint}>{t('common.loading')}</div>

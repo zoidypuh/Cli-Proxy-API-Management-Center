@@ -935,6 +935,114 @@
   }
 }
 
+.calibrationPanel {
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-sm;
+  margin-bottom: $spacing-sm;
+  padding: $spacing-sm;
+  border: 1px solid var(--border-color);
+  border-radius: $radius-md;
+  background: var(--bg-secondary);
+}
+
+.calibrationHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: $spacing-sm;
+  flex-wrap: wrap;
+
+  > div {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  strong {
+    color: var(--text-primary);
+    font-size: 13px;
+  }
+
+  span {
+    color: var(--text-secondary);
+    font-size: 12px;
+  }
+}
+
+.calibrationUsageSnapshot {
+  align-items: flex-end;
+
+  @include mobile {
+    align-items: flex-start;
+  }
+}
+
+.calibrationGrid {
+  display: grid;
+  gap: $spacing-xs;
+  grid-template-columns: repeat(5, minmax(120px, 1fr));
+
+  @include tablet {
+    grid-template-columns: repeat(3, minmax(120px, 1fr));
+  }
+
+  @include mobile {
+    grid-template-columns: 1fr;
+  }
+}
+
+.calibrationMetric {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+
+  span {
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  strong {
+    color: var(--text-primary);
+    font-size: 15px;
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
+  }
+}
+
+.calibrationWeights {
+  display: grid;
+  gap: $spacing-sm;
+  align-items: end;
+  grid-template-columns: repeat(3, minmax(120px, 180px)) minmax(180px, 1fr);
+
+  @include tablet {
+    grid-template-columns: repeat(2, minmax(120px, 1fr));
+  }
+
+  @include mobile {
+    grid-template-columns: 1fr;
+  }
+}
+
+.calibrationActions {
+  display: inline-flex;
+  justify-content: flex-end;
+  gap: $spacing-xs;
+  flex-wrap: wrap;
+
+  @include tablet {
+    justify-content: flex-start;
+  }
+}
+
+.calibrationStatus {
+  color: var(--success-color);
+  font-size: 12px;
+  font-weight: 600;
+}
+
 .requestEventsMeta {
   display: flex;
   align-items: center;
