@@ -494,8 +494,17 @@ export function RequestEventsDetailsCard({
   );
 
   const renderedRows = useMemo(() => filteredRows.slice(0, MAX_RENDERED_EVENTS), [filteredRows]);
-  const filteredTotalTokens = useMemo(
-    () => filteredRows.reduce((sum, row) => sum + row.totalTokens, 0),
+  const filteredTokenTotals = useMemo(
+    () =>
+      filteredRows.reduce(
+        (totals, row) => ({
+          freshInput: totals.freshInput + row.freshInputTokens,
+          output: totals.output + row.outputTokens,
+          cached: totals.cached + row.cachedTokens,
+          total: totals.total + row.totalTokens,
+        }),
+        { freshInput: 0, output: 0, cached: 0, total: 0 }
+      ),
     [filteredRows]
   );
   const calibrationSeedRow = filteredRows[0] ?? null;
@@ -964,8 +973,27 @@ export function RequestEventsDetailsCard({
           {t('usage_stats.calibration_start')}
         </Button>
         <div className={styles.requestEventsTokenSummary}>
-          <span>{t('usage_stats.request_events_filtered_total_tokens')}</span>
-          <strong>{filteredTotalTokens.toLocaleString()}</strong>
+          <span className={styles.requestEventsTokenSummaryTitle}>
+            {t('usage_stats.request_events_filtered_tokens')}
+          </span>
+          <div className={styles.requestEventsTokenSummaryGrid}>
+            <span className={styles.requestEventsTokenMetric}>
+              <span>{t('usage_stats.fresh_input_tokens')}</span>
+              <strong>{filteredTokenTotals.freshInput.toLocaleString()}</strong>
+            </span>
+            <span className={styles.requestEventsTokenMetric}>
+              <span>{t('usage_stats.output_tokens')}</span>
+              <strong>{filteredTokenTotals.output.toLocaleString()}</strong>
+            </span>
+            <span className={styles.requestEventsTokenMetric}>
+              <span>{t('usage_stats.cached_tokens')}</span>
+              <strong>{filteredTokenTotals.cached.toLocaleString()}</strong>
+            </span>
+            <span className={styles.requestEventsTokenMetric}>
+              <span>{t('usage_stats.total_tokens')}</span>
+              <strong>{filteredTokenTotals.total.toLocaleString()}</strong>
+            </span>
+          </div>
         </div>
       </div>
 

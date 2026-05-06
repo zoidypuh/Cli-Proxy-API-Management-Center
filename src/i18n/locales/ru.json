@@ -1033,6 +1033,7 @@
     "request_events_no_result_title": "Совпадений не найдено",
     "request_events_no_result_desc": "Попробуйте другие фильтры или очистите текущие.",
     "request_events_count": "{{count}} событий",
+    "request_events_filtered_tokens": "Токены в фильтре",
     "request_events_filtered_total_tokens": "Всего токенов в фильтре",
     "request_events_limit_hint": "Показано {{shown}} из {{total}} событий для стабильной производительности.",
     "calibration_start": "Начать калибровку",
