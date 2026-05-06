@@ -67,16 +67,18 @@ const TIME_RANGE_OPTIONS: ReadonlyArray<{ value: UsageTimeRange; labelKey: strin
   { value: 'all', labelKey: 'usage_stats.range_all' },
   { value: '7h', labelKey: 'usage_stats.range_7h' },
   { value: '24h', labelKey: 'usage_stats.range_24h' },
+  { value: '48h', labelKey: 'usage_stats.range_48h' },
   { value: '7d', labelKey: 'usage_stats.range_7d' },
 ];
 const HOUR_WINDOW_BY_TIME_RANGE: Record<Exclude<UsageTimeRange, 'all'>, number> = {
   '7h': 7,
   '24h': 24,
+  '48h': 48,
   '7d': 7 * 24,
 };
 
 const isUsageTimeRange = (value: unknown): value is UsageTimeRange =>
-  value === '7h' || value === '24h' || value === '7d' || value === 'all';
+  value === '7h' || value === '24h' || value === '48h' || value === '7d' || value === 'all';
 
 const normalizeChartLines = (value: unknown, maxLines = MAX_CHART_LINES): string[] => {
   if (!Array.isArray(value)) {
@@ -194,6 +196,7 @@ export function UsagePage() {
     [usage, timeRange]
   );
   const hourWindowHours = timeRange === 'all' ? undefined : HOUR_WINDOW_BY_TIME_RANGE[timeRange];
+  const timeRangeMinutes = hourWindowHours === undefined ? null : hourWindowHours * 60;
 
   const handleChartLinesChange = useCallback((lines: string[]) => {
     setChartLines(normalizeChartLines(lines));
@@ -325,6 +328,7 @@ export function UsagePage() {
         loading={loading}
         modelPrices={modelPrices}
         nowMs={nowMs}
+        timeRangeMinutes={timeRangeMinutes}
         sparklines={{
           requests: requestsSparkline,
           tokens: tokensSparkline,

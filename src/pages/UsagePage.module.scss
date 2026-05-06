@@ -309,6 +309,16 @@
   color: var(--text-tertiary);
 }
 
+.statProjectionGood {
+  color: var(--success-color);
+  font-weight: 700;
+}
+
+.statProjectionBad {
+  color: var(--error-color);
+  font-weight: 700;
+}
+
 .statTrend {
   margin-top: auto;
   background: var(--bg-tertiary);
