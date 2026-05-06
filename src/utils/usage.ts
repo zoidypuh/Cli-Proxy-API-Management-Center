@@ -64,6 +64,7 @@ export interface UsageDetail {
   timestamp: string;
   source: string;
   auth_index: string | number | null;
+  session_id?: string;
   latency_ms?: number;
   tokens: {
     input_tokens: number;
@@ -580,6 +581,14 @@ export function collectUsageDetails(usageData: unknown): UsageDetail[] {
         const timestampMs = parseTimestampMs(timestamp);
         const tokensRaw = isRecord(detailRaw.tokens) ? detailRaw.tokens : {};
         const latencyMs = extractLatencyMs(detailRaw);
+        const sessionIdRaw =
+          detailRaw.session_id ?? detailRaw.sessionId ?? detailRaw.SessionID ?? '';
+        const sessionId =
+          typeof sessionIdRaw === 'string'
+            ? sessionIdRaw.trim()
+            : sessionIdRaw === null || sessionIdRaw === undefined
+              ? ''
+              : String(sessionIdRaw).trim();
         details.push({
           timestamp,
           source: normalizeSource(detailRaw.source),
@@ -587,6 +596,7 @@ export function collectUsageDetails(usageData: unknown): UsageDetail[] {
             detailRaw?.authIndex ??
             detailRaw?.AuthIndex ??
             null) as UsageDetail['auth_index'],
+          session_id: sessionId || undefined,
           latency_ms: latencyMs ?? undefined,
           tokens: tokensRaw as unknown as UsageDetail['tokens'],
           thinking: normalizeUsageThinking(detailRaw.thinking),

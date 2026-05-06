@@ -1045,6 +1045,8 @@
     "request_events_count": "{{count}} событий",
     "request_events_filtered_tokens": "Токены в фильтре",
     "request_events_filtered_total_tokens": "Всего токенов в фильтре",
+    "request_events_filter_session": "Сессия",
+    "request_events_session": "Сессия",
     "request_events_limit_hint": "Показано {{shown}} из {{total}} событий для стабильной производительности.",
     "calibration_start": "Начать калибровку",
     "calibration_cancel": "Отмена",
