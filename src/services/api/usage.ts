@@ -22,6 +22,19 @@ export interface UsageImportResponse {
   [key: string]: unknown;
 }
 
+export interface UsageCalibrationStore {
+  version?: number;
+  updated_at?: string;
+  calibrations?: Record<string, unknown>[];
+}
+
+export interface UsageCalibrationSaveResponse {
+  ok?: boolean;
+  calibration?: Record<string, unknown>;
+  count?: number;
+  [key: string]: unknown;
+}
+
 export const usageApi = {
   /**
    * 获取使用统计原始数据
@@ -38,6 +51,14 @@ export const usageApi = {
    */
   importUsage: (payload: unknown) =>
     apiClient.post<UsageImportResponse>('/usage/import', payload, { timeout: USAGE_TIMEOUT_MS }),
+
+  getCalibrations: () =>
+    apiClient.get<UsageCalibrationStore>('/usage/calibrations', { timeout: USAGE_TIMEOUT_MS }),
+
+  saveCalibration: (payload: Record<string, unknown>) =>
+    apiClient.post<UsageCalibrationSaveResponse>('/usage/calibrations', payload, {
+      timeout: USAGE_TIMEOUT_MS,
+    }),
 
   /**
    * 计算密钥成功/失败统计，必要时会先获取 usage 数据
