@@ -1064,6 +1064,8 @@
     "request_events_count": "{{count}} 條事件",
     "request_events_filtered_tokens": "篩選後 Tokens",
     "request_events_filtered_total_tokens": "篩選後總 Tokens",
+    "request_events_filter_session": "工作階段",
+    "request_events_session": "工作階段",
     "request_events_limit_hint": "為確保渲染效能，僅展示 {{shown}} / {{total}} 條事件。",
     "calibration_start": "開始校準",
     "calibration_cancel": "取消",

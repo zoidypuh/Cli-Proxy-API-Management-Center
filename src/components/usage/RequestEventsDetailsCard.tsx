@@ -57,6 +57,7 @@ type RequestEventRow = {
   source: string;
   sourceType: string;
   authIndex: string;
+  sessionId: string;
   failed: boolean;
   latencyMs: number | null;
   thinking: UsageThinking | null;
@@ -276,6 +277,7 @@ export function RequestEventsDetailsCard({
   const [modelFilter, setModelFilter] = useState(ALL_FILTER);
   const [sourceFilter, setSourceFilter] = useState(ALL_FILTER);
   const [authIndexFilter, setAuthIndexFilter] = useState(ALL_FILTER);
+  const [sessionFilter, setSessionFilter] = useState(ALL_FILTER);
   const [authFiles, setAuthFiles] = useState<AuthFileItem[]>([]);
   const [authFileMap, setAuthFileMap] = useState<Map<string, CredentialInfo>>(new Map());
   const [activeCalibration, setActiveCalibration] = useState<ActiveCalibration | null>(null);
@@ -343,6 +345,7 @@ export function RequestEventsDetailsCard({
       const sourceKey = sourceInfo.identityKey ?? `source:${sourceRaw || source}`;
       const sourceType = sourceInfo.type;
       const model = String(detail.__modelName ?? '').trim() || '-';
+      const sessionId = String(detail.session_id ?? '').trim() || '-';
       const inputTokens = Math.max(toNumber(detail.tokens?.input_tokens), 0);
       const outputTokens = Math.max(toNumber(detail.tokens?.output_tokens), 0);
       const reasoningTokens = Math.max(toNumber(detail.tokens?.reasoning_tokens), 0);
@@ -370,6 +373,7 @@ export function RequestEventsDetailsCard({
         source,
         sourceType,
         authIndex,
+        sessionId,
         failed: detail.failed === true,
         latencyMs,
         thinking,
@@ -460,6 +464,17 @@ export function RequestEventsDetailsCard({
     [rows, t]
   );
 
+  const sessionOptions = useMemo(
+    () => [
+      { value: ALL_FILTER, label: t('usage_stats.filter_all') },
+      ...Array.from(new Set(rows.map((row) => row.sessionId))).map((sessionId) => ({
+        value: sessionId,
+        label: sessionId,
+      })),
+    ],
+    [rows, t]
+  );
+
   const modelOptionSet = useMemo(
     () => new Set(modelOptions.map((option) => option.value)),
     [modelOptions]
@@ -472,12 +487,17 @@ export function RequestEventsDetailsCard({
     () => new Set(authIndexOptions.map((option) => option.value)),
     [authIndexOptions]
   );
+  const sessionOptionSet = useMemo(
+    () => new Set(sessionOptions.map((option) => option.value)),
+    [sessionOptions]
+  );
 
   const effectiveModelFilter = modelOptionSet.has(modelFilter) ? modelFilter : ALL_FILTER;
   const effectiveSourceFilter = sourceOptionSet.has(sourceFilter) ? sourceFilter : ALL_FILTER;
   const effectiveAuthIndexFilter = authIndexOptionSet.has(authIndexFilter)
     ? authIndexFilter
     : ALL_FILTER;
+  const effectiveSessionFilter = sessionOptionSet.has(sessionFilter) ? sessionFilter : ALL_FILTER;
 
   const filteredRows = useMemo(
     () =>
@@ -488,9 +508,17 @@ export function RequestEventsDetailsCard({
           effectiveSourceFilter === ALL_FILTER || row.sourceKey === effectiveSourceFilter;
         const authIndexMatched =
           effectiveAuthIndexFilter === ALL_FILTER || row.authIndex === effectiveAuthIndexFilter;
-        return modelMatched && sourceMatched && authIndexMatched;
+        const sessionMatched =
+          effectiveSessionFilter === ALL_FILTER || row.sessionId === effectiveSessionFilter;
+        return modelMatched && sourceMatched && authIndexMatched && sessionMatched;
       }),
-    [effectiveAuthIndexFilter, effectiveModelFilter, effectiveSourceFilter, rows]
+    [
+      effectiveAuthIndexFilter,
+      effectiveModelFilter,
+      effectiveSessionFilter,
+      effectiveSourceFilter,
+      rows,
+    ]
   );
 
   const renderedRows = useMemo(() => filteredRows.slice(0, MAX_RENDERED_EVENTS), [filteredRows]);
@@ -660,7 +688,8 @@ export function RequestEventsDetailsCard({
   const hasActiveFilters =
     effectiveModelFilter !== ALL_FILTER ||
     effectiveSourceFilter !== ALL_FILTER ||
-    effectiveAuthIndexFilter !== ALL_FILTER;
+    effectiveAuthIndexFilter !== ALL_FILTER ||
+    effectiveSessionFilter !== ALL_FILTER;
 
   const handleStartCalibration = async () => {
     if (!calibrationSeedRow) {
@@ -801,6 +830,7 @@ export function RequestEventsDetailsCard({
     setModelFilter(ALL_FILTER);
     setSourceFilter(ALL_FILTER);
     setAuthIndexFilter(ALL_FILTER);
+    setSessionFilter(ALL_FILTER);
   };
 
   const handleExportCsv = () => {
@@ -812,6 +842,7 @@ export function RequestEventsDetailsCard({
       'source',
       'source_raw',
       'auth_index',
+      'session_id',
       'result',
       ...(hasLatencyData ? ['latency_ms'] : []),
       'thinking_intensity',
@@ -833,6 +864,7 @@ export function RequestEventsDetailsCard({
         row.source,
         row.sourceRaw,
         row.authIndex,
+        row.sessionId === '-' ? '' : row.sessionId,
         row.failed ? 'failed' : 'success',
         ...(hasLatencyData ? [row.latencyMs ?? ''] : []),
         row.thinking?.intensity ?? '',
@@ -867,6 +899,7 @@ export function RequestEventsDetailsCard({
       source: row.source,
       source_raw: row.sourceRaw,
       auth_index: row.authIndex,
+      session_id: row.sessionId === '-' ? '' : row.sessionId,
       failed: row.failed,
       ...(hasLatencyData && row.latencyMs !== null ? { latency_ms: row.latencyMs } : {}),
       ...(row.thinking ? { thinking: row.thinking } : {}),
@@ -960,6 +993,20 @@ export function RequestEventsDetailsCard({
             className={styles.requestEventsSelect}
             disabled={isCalibrationActive}
             ariaLabel={t('usage_stats.request_events_filter_auth_index')}
+            fullWidth={false}
+          />
+        </div>
+        <div className={styles.requestEventsFilterItem}>
+          <span className={styles.requestEventsFilterLabel}>
+            {t('usage_stats.request_events_filter_session')}
+          </span>
+          <Select
+            value={effectiveSessionFilter}
+            options={sessionOptions}
+            onChange={setSessionFilter}
+            className={styles.requestEventsSelect}
+            disabled={isCalibrationActive}
+            ariaLabel={t('usage_stats.request_events_filter_session')}
             fullWidth={false}
           />
         </div>
@@ -1149,6 +1196,7 @@ export function RequestEventsDetailsCard({
                   <th>{t('usage_stats.model_name')}</th>
                   <th>{t('usage_stats.request_events_source')}</th>
                   <th>{t('usage_stats.request_events_auth_index')}</th>
+                  <th>{t('usage_stats.request_events_session')}</th>
                   <th>{t('usage_stats.request_events_result')}</th>
                   {hasLatencyData && <th title={latencyHint}>{t('usage_stats.time')}</th>}
                   <th>{t('usage_stats.thinking_intensity')}</th>
@@ -1175,6 +1223,9 @@ export function RequestEventsDetailsCard({
                     </td>
                     <td className={styles.requestEventsAuthIndex} title={row.authIndex}>
                       {row.authIndex}
+                    </td>
+                    <td className={styles.requestEventsAuthIndex} title={row.sessionId}>
+                      {row.sessionId}
                     </td>
                     <td>
                       <span

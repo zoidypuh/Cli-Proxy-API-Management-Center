@@ -1038,6 +1038,8 @@
     "request_events_count": "{{count}} events",
     "request_events_filtered_tokens": "Filtered Tokens",
     "request_events_filtered_total_tokens": "Filtered Total Tokens",
+    "request_events_filter_session": "Session",
+    "request_events_session": "Session",
     "request_events_limit_hint": "Showing {{shown}} of {{total}} events to keep rendering responsive.",
     "calibration_start": "Start Calibration",
     "calibration_cancel": "Cancel",
