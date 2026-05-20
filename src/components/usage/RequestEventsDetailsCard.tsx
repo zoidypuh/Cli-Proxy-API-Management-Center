@@ -8,9 +8,11 @@ import { Select } from '@/components/ui/Select';
 import { apiCallApi, getApiCallErrorMessage } from '@/services/api/apiCall';
 import { authFilesApi } from '@/services/api/authFiles';
 import { usageApi } from '@/services/api/usage';
+import { useNotificationStore } from '@/stores';
 import type { GeminiKeyConfig, ProviderKeyConfig, OpenAIProviderConfig } from '@/types';
 import type { AuthFileItem } from '@/types/authFile';
 import type { CredentialInfo } from '@/types/sourceInfo';
+import { copyToClipboard } from '@/utils/clipboard';
 import { buildSourceInfoMap, resolveSourceDisplay } from '@/utils/sourceResolver';
 import { parseTimestampMs } from '@/utils/timestamp';
 import {
@@ -39,6 +41,7 @@ const ALL_FILTER = '__all__';
 const MAX_RENDERED_EVENTS = 500;
 const CODEX_FIVE_HOUR_SECONDS = 5 * 60 * 60;
 const CODEX_SEVEN_DAY_SECONDS = 7 * 24 * 60 * 60;
+const LOGS_UNC_ROOT = '\\\\wsl.localhost\\Ubuntu-24.04\\home\\gismar\\.cli-proxy-api\\logs';
 
 const DEFAULT_CALIBRATION_WEIGHTS = {
   freshInput: '2.5',
@@ -68,6 +71,8 @@ type RequestEventRow = {
   reasoningTokens: number;
   cachedTokens: number;
   totalTokens: number;
+  requestLog: string;
+  requestLogPath: string;
 };
 
 type CalibrationProvider = 'codex' | 'claude';
@@ -212,6 +217,23 @@ const getWindowResetAt = (window: Record<string, unknown> | null): string | null
 const formatPercentValue = (value: number | null): string =>
   value === null ? '-' : `${value.toFixed(2)}%`;
 
+const normalizeRequestLogName = (value: string | undefined): string => {
+  const raw = String(value ?? '').trim();
+  if (!raw) return '';
+
+  const normalized = raw
+    .replace(/^"+|"+$/g, '')
+    .replace(/^\/home\/gismar\/\.cli-proxy-api\/logs\/?/i, '')
+    .replace(/^\\\\wsl\.localhost\\Ubuntu-24\.04\\home\\gismar\\\.cli-proxy-api\\logs\\?/i, '')
+    .replace(/^logs[\\/]/i, '')
+    .replace(/[\\/]+/g, '\\');
+
+  return normalized.replace(/^\\+/, '');
+};
+
+const buildRequestLogPath = (logName: string): string =>
+  logName ? `${LOGS_UNC_ROOT}\\${logName}` : '';
+
 const normalizeProvider = (value: unknown): CalibrationProvider | null => {
   const provider = String(value ?? '')
     .trim()
@@ -269,6 +291,7 @@ export function RequestEventsDetailsCard({
   openaiProviders,
 }: RequestEventsDetailsCardProps) {
   const { t, i18n } = useTranslation();
+  const showNotification = useNotificationStore((state) => state.showNotification);
   const latencyHint = t('usage_stats.latency_unit_hint', {
     field: LATENCY_SOURCE_FIELD,
     unit: t('usage_stats.duration_unit_ms'),
@@ -285,6 +308,7 @@ export function RequestEventsDetailsCard({
   const [calibrationBusy, setCalibrationBusy] = useState(false);
   const [calibrationError, setCalibrationError] = useState('');
   const [calibrationStatus, setCalibrationStatus] = useState('');
+  const [copyFallbackPath, setCopyFallbackPath] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -361,6 +385,7 @@ export function RequestEventsDetailsCard({
       const latencyMs = extractLatencyMs(detail);
       const thinking = detail.thinking ?? null;
       const thinkingLabel = formatThinkingLabel(thinking);
+      const requestLog = normalizeRequestLogName(detail.request_log);
 
       return {
         id: `${timestamp}-${model}-${sourceKey}-${authIndex}-${index}`,
@@ -384,6 +409,8 @@ export function RequestEventsDetailsCard({
         reasoningTokens,
         cachedTokens,
         totalTokens,
+        requestLog,
+        requestLogPath: buildRequestLogPath(requestLog),
       };
     });
 
@@ -833,6 +860,20 @@ export function RequestEventsDetailsCard({
     setSessionFilter(ALL_FILTER);
   };
 
+  const handleCopyRequestLogPath = async (path: string) => {
+    if (!path) return;
+
+    const copied = await copyToClipboard(path);
+    if (copied) {
+      setCopyFallbackPath('');
+      showNotification(t('notification.link_copied'), 'success');
+      return;
+    }
+
+    setCopyFallbackPath(path);
+    showNotification(t('notification.copy_failed'), 'error');
+  };
+
   const handleExportCsv = () => {
     if (!filteredRows.length) return;
 
@@ -1187,6 +1228,12 @@ export function RequestEventsDetailsCard({
               </span>
             )}
           </div>
+          {copyFallbackPath && (
+            <div className={styles.requestEventsCopyFallback}>
+              <span>{t('usage_stats.request_events_log_path', { defaultValue: 'Log path' })}</span>
+              <input readOnly value={copyFallbackPath} onFocus={(event) => event.target.select()} />
+            </div>
+          )}
 
           <div className={styles.requestEventsTableWrapper}>
             <table className={styles.table}>
@@ -1206,6 +1253,9 @@ export function RequestEventsDetailsCard({
                   <th>{t('usage_stats.reasoning_tokens')}</th>
                   <th>{t('usage_stats.cached_tokens')}</th>
                   <th>{t('usage_stats.total_tokens')}</th>
+                  <th className={styles.requestEventsActionHeader}>
+                    {t('usage_stats.request_events_log', { defaultValue: 'Log' })}
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -1275,6 +1325,17 @@ export function RequestEventsDetailsCard({
                     <td>{row.reasoningTokens.toLocaleString()}</td>
                     <td>{row.cachedTokens.toLocaleString()}</td>
                     <td>{row.totalTokens.toLocaleString()}</td>
+                    <td className={styles.requestEventsActionCell}>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => void handleCopyRequestLogPath(row.requestLogPath)}
+                        disabled={!row.requestLogPath}
+                        title={row.requestLog || undefined}
+                      >
+                        {t('common.copy')}
+                      </Button>
+                    </td>
                   </tr>
                 ))}
               </tbody>

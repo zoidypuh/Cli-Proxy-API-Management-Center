@@ -41,6 +41,7 @@ import {
   getApiStats,
   getModelStats,
   filterUsageByTimeRange,
+  filterUsageByModels,
   type UsageTimeRange,
 } from '@/utils/usage';
 import styles from './UsagePage.module.scss';
@@ -195,6 +196,10 @@ export function UsagePage() {
     () => (usage ? filterUsageByTimeRange(usage, timeRange) : null),
     [usage, timeRange]
   );
+  const selectedModelUsage = useMemo(
+    () => (filteredUsage ? filterUsageByModels(filteredUsage, chartLines) : null),
+    [chartLines, filteredUsage]
+  );
   const hourWindowHours = timeRange === 'all' ? undefined : HOUR_WINDOW_BY_TIME_RANGE[timeRange];
   const timeRangeMinutes = hourWindowHours === undefined ? null : hourWindowHours * 60;
 
@@ -228,7 +233,7 @@ export function UsagePage() {
 
   // Sparklines hook
   const { requestsSparkline, tokensSparkline, rpmSparkline, tpmSparkline, costSparkline } =
-    useSparklines({ usage: filteredUsage, loading, nowMs });
+    useSparklines({ usage: selectedModelUsage, loading, nowMs });
 
   // Chart data hook
   const {
@@ -240,7 +245,7 @@ export function UsagePage() {
     tokensChartData,
     requestsChartOptions,
     tokensChartOptions,
-  } = useChartData({ usage: filteredUsage, chartLines, isDark, isMobile, hourWindowHours });
+  } = useChartData({ usage: selectedModelUsage, chartLines, isDark, isMobile, hourWindowHours });
 
   // Derived data
   const modelNames = useMemo(() => getModelNamesFromUsage(usage), [usage]);
@@ -253,6 +258,7 @@ export function UsagePage() {
     [filteredUsage, modelPrices]
   );
   const hasPrices = Object.keys(modelPrices).length > 0;
+  const chartLinesKey = chartLines.join('|');
 
   return (
     <div className={styles.container}>
@@ -324,7 +330,7 @@ export function UsagePage() {
 
       {/* Stats Overview Cards */}
       <StatCards
-        usage={filteredUsage}
+        usage={selectedModelUsage}
         loading={loading}
         modelPrices={modelPrices}
         nowMs={nowMs}
@@ -344,6 +350,9 @@ export function UsagePage() {
         modelNames={modelNames}
         maxLines={MAX_CHART_LINES}
         onChange={handleChartLinesChange}
+        onRefresh={() => void loadUsage().catch(() => {})}
+        refreshing={loading}
+        refreshDisabled={exporting || importing}
       />
 
       {/* Service Health */}
@@ -353,6 +362,7 @@ export function UsagePage() {
       <div className={styles.chartsGrid}>
         <UsageChart
           title={t('usage_stats.requests_trend')}
+          chartKey={`requests-${requestsPeriod}-${chartLinesKey}`}
           period={requestsPeriod}
           onPeriodChange={setRequestsPeriod}
           chartData={requestsChartData}
@@ -363,6 +373,7 @@ export function UsagePage() {
         />
         <UsageChart
           title={t('usage_stats.tokens_trend')}
+          chartKey={`tokens-${tokensPeriod}-${chartLinesKey}`}
           period={tokensPeriod}
           onPeriodChange={setTokensPeriod}
           chartData={tokensChartData}
@@ -375,7 +386,7 @@ export function UsagePage() {
 
       {/* Token Breakdown Chart */}
       <TokenBreakdownChart
-        usage={filteredUsage}
+        usage={selectedModelUsage}
         loading={loading}
         isDark={isDark}
         isMobile={isMobile}
@@ -384,7 +395,7 @@ export function UsagePage() {
 
       {/* Cost Trend Chart */}
       <CostTrendChart
-        usage={filteredUsage}
+        usage={selectedModelUsage}
         loading={loading}
         isDark={isDark}
         isMobile={isMobile}
