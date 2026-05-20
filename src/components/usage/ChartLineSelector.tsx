@@ -10,13 +10,19 @@ export interface ChartLineSelectorProps {
   modelNames: string[];
   maxLines?: number;
   onChange: (lines: string[]) => void;
+  onRefresh?: () => void;
+  refreshing?: boolean;
+  refreshDisabled?: boolean;
 }
 
 export function ChartLineSelector({
   chartLines,
   modelNames,
   maxLines = 9,
-  onChange
+  onChange,
+  onRefresh,
+  refreshing = false,
+  refreshDisabled = false,
 }: ChartLineSelectorProps) {
   const { t } = useTranslation();
 
@@ -46,7 +52,7 @@ export function ChartLineSelector({
   const options = useMemo(
     () => [
       { value: 'all', label: t('usage_stats.chart_line_all') },
-      ...modelNames.map((name) => ({ value: name, label: name }))
+      ...modelNames.map((name) => ({ value: name, label: name })),
     ],
     [modelNames, t]
   );
@@ -67,6 +73,17 @@ export function ChartLineSelector({
           >
             {t('usage_stats.chart_line_add')}
           </Button>
+          {onRefresh && (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={onRefresh}
+              loading={refreshing}
+              disabled={refreshDisabled}
+            >
+              {t('usage_stats.refresh')}
+            </Button>
+          )}
         </div>
       }
     >

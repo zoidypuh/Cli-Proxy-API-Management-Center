@@ -65,6 +65,7 @@ export interface UsageDetail {
   source: string;
   auth_index: string | number | null;
   session_id?: string;
+  request_log?: string;
   latency_ms?: number;
   tokens: {
     input_tokens: number;
@@ -251,6 +252,97 @@ export function filterUsageByTimeRange<T>(
         ...modelEntry,
         ...toUsageSummaryFields(modelSummary),
         details: filteredDetails,
+      };
+      hasModelData = true;
+
+      apiSummary.totalRequests += modelSummary.totalRequests;
+      apiSummary.successCount += modelSummary.successCount;
+      apiSummary.failureCount += modelSummary.failureCount;
+      apiSummary.totalTokens += modelSummary.totalTokens;
+    });
+
+    if (!hasModelData) {
+      return;
+    }
+
+    filteredApis[apiName] = {
+      ...apiEntry,
+      ...toUsageSummaryFields(apiSummary),
+      models: filteredModels,
+    };
+
+    totalSummary.totalRequests += apiSummary.totalRequests;
+    totalSummary.successCount += apiSummary.successCount;
+    totalSummary.failureCount += apiSummary.failureCount;
+    totalSummary.totalTokens += apiSummary.totalTokens;
+  });
+
+  return {
+    ...usageRecord,
+    ...toUsageSummaryFields(totalSummary),
+    apis: filteredApis,
+  } as T;
+}
+
+export function filterUsageByModels<T>(usageData: T, selectedModels: string[]): T {
+  if (selectedModels.some((model) => model.trim() === 'all')) {
+    return usageData;
+  }
+
+  const modelsToKeep = new Set(
+    selectedModels.map((model) => model.trim()).filter((model) => model && model !== 'all')
+  );
+  if (modelsToKeep.size === 0) {
+    return usageData;
+  }
+
+  const usageRecord = isRecord(usageData) ? usageData : null;
+  const apis = getApisRecord(usageData);
+  if (!usageRecord || !apis) {
+    return usageData;
+  }
+
+  const filteredApis: Record<string, unknown> = {};
+  const totalSummary = createUsageSummary();
+
+  Object.entries(apis).forEach(([apiName, apiEntry]) => {
+    if (!isRecord(apiEntry)) {
+      return;
+    }
+
+    const models = isRecord(apiEntry.models) ? apiEntry.models : null;
+    if (!models) {
+      return;
+    }
+
+    const filteredModels: Record<string, unknown> = {};
+    const apiSummary = createUsageSummary();
+    let hasModelData = false;
+
+    Object.entries(models).forEach(([modelName, modelEntry]) => {
+      if (!modelsToKeep.has(modelName) || !isRecord(modelEntry)) {
+        return;
+      }
+
+      const details = Array.isArray(modelEntry.details) ? modelEntry.details : [];
+      const modelSummary = createUsageSummary();
+      details.forEach((detail) => {
+        const detailRecord = isRecord(detail) ? detail : null;
+        if (!detailRecord) {
+          return;
+        }
+        modelSummary.totalRequests += 1;
+        if (detailRecord.failed === true) {
+          modelSummary.failureCount += 1;
+        } else {
+          modelSummary.successCount += 1;
+        }
+        modelSummary.totalTokens += extractTotalTokens(detailRecord);
+      });
+
+      filteredModels[modelName] = {
+        ...modelEntry,
+        ...toUsageSummaryFields(modelSummary),
       };
       hasModelData = true;
 
@@ -589,6 +681,22 @@ export function collectUsageDetails(usageData: unknown): UsageDetail[] {
             : sessionIdRaw === null || sessionIdRaw === undefined
               ? ''
               : String(sessionIdRaw).trim();
+        const requestLogRaw =
+          detailRaw.request_log ??
+          detailRaw.requestLog ??
+          detailRaw.request_log_file ??
+          detailRaw.requestLogFile ??
+          detailRaw.log_file ??
+          detailRaw.logFile ??
+          detailRaw.log_name ??
+          detailRaw.logName ??
+          detailRaw.log;
+        const requestLog =
+          typeof requestLogRaw === 'string'
+            ? requestLogRaw.trim()
+            : requestLogRaw === null || requestLogRaw === undefined
+              ? ''
+              : String(requestLogRaw).trim();
         details.push({
           timestamp,
           source: normalizeSource(detailRaw.source),
@@ -597,6 +705,7 @@ export function collectUsageDetails(usageData: unknown): UsageDetail[] {
             detailRaw?.AuthIndex ??
             null) as UsageDetail['auth_index'],
           session_id: sessionId || undefined,
+          request_log: requestLog || undefined,
           latency_ms: latencyMs ?? undefined,
           tokens: tokensRaw as unknown as UsageDetail['tokens'],
           thinking: normalizeUsageThinking(detailRaw.thinking),

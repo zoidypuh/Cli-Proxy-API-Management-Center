@@ -9,6 +9,7 @@ import styles from '@/pages/UsagePage.module.scss';
 
 export interface UsageChartProps {
   title: string;
+  chartKey?: string;
   period: 'hour' | 'day';
   onPeriodChange: (period: 'hour' | 'day') => void;
   chartData: ChartData;
@@ -20,13 +21,14 @@ export interface UsageChartProps {
 
 export function UsageChart({
   title,
+  chartKey,
   period,
   onPeriodChange,
   chartData,
   chartOptions,
   loading,
   isMobile,
-  emptyText
+  emptyText,
 }: UsageChartProps) {
   const { t } = useTranslation();
 
@@ -63,7 +65,10 @@ export function UsageChart({
                 className={styles.legendItem}
                 title={dataset.label}
               >
-                <span className={styles.legendDot} style={{ backgroundColor: dataset.borderColor }} />
+                <span
+                  className={styles.legendDot}
+                  style={{ backgroundColor: dataset.borderColor }}
+                />
                 <span className={styles.legendLabel}>{dataset.label}</span>
               </div>
             ))}
@@ -78,7 +83,7 @@ export function UsageChart({
                     : undefined
                 }
               >
-                <Line data={chartData} options={chartOptions} />
+                <Line key={chartKey} data={chartData} options={chartOptions} />
               </div>
             </div>
           </div>
